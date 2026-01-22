@@ -9,7 +9,7 @@ import {
   getDateString,
 } from "./storage";
 import { watchSystemEvents, getSwiftNotificationWatcher } from "./macos-events";
-import type { EventType, WorkData, WorkSession } from "./types";
+import type { EventType, WorkData } from "./types";
 import { join } from "path";
 import { homedir } from "os";
 
@@ -32,7 +32,6 @@ async function compileSwiftHelper(): Promise<boolean> {
 }
 
 async function startSwiftWatcher(): Promise<AsyncGenerator<EventType> | null> {
-  // Check if helper exists, compile if not
   const helperFile = Bun.file(SWIFT_HELPER_PATH);
   if (!(await helperFile.exists())) {
     const compiled = await compileSwiftHelper();
@@ -52,7 +51,6 @@ async function startSwiftWatcher(): Promise<AsyncGenerator<EventType> | null> {
     const decoder = new TextDecoder();
     let buffer = "";
 
-    // Wait for READY signal
     while (true) {
       const { done, value } = await reader.read();
       if (done) return;
@@ -65,7 +63,6 @@ async function startSwiftWatcher(): Promise<AsyncGenerator<EventType> | null> {
       }
     }
 
-    // Process events
     while (true) {
       const { done, value } = await reader.read();
       if (done) return;
@@ -94,115 +91,56 @@ async function handleEvent(event: EventType, data: WorkData): Promise<WorkData> 
 
   switch (event) {
     case "startup":
-    case "wake":
-    case "unlock":
-    case "idle_end": {
-      // Start or resume work
+    case "unlock": {
+      // Start work session
       if (!data.currentSession) {
-        // Start new session
         data.currentSession = createSession(now);
-        console.log(`[${now.toISOString()}] Started new work session`);
-      } else if (data.currentSession.breaks.length > 0) {
-        // End current break
-        const lastBreak = data.currentSession.breaks[data.currentSession.breaks.length - 1];
-        if (!lastBreak.endTime) {
-          lastBreak.endTime = now.toISOString();
-          console.log(`[${now.toISOString()}] Resumed work (break ended)`);
-        }
+        console.log(`[${now.toISOString()}] Work started`);
       }
-      // Check if session is from a different day
+      // Handle day change
       if (data.currentSession && data.currentSession.date !== today) {
-        // End old session at midnight
         const midnight = new Date(now);
         midnight.setHours(0, 0, 0, 0);
 
         data.currentSession.endTime = midnight.toISOString();
-        data.currentSession.totalMinutes = calculateSessionMinutes(data.currentSession);
         data.sessions.push(data.currentSession);
 
-        // Start new session for today
         data.currentSession = createSession(now);
-        console.log(`[${now.toISOString()}] New day - started new session`);
+        console.log(`[${now.toISOString()}] New day - new session`);
       }
       break;
     }
 
-    case "sleep":
     case "lock":
-    case "idle_start": {
-      // Start a break or end session
-      if (data.currentSession) {
-        const reason = event === "sleep" ? "sleep" : event === "lock" ? "lock" : "idle";
-        data.currentSession.breaks.push({
-          startTime: now.toISOString(),
-          endTime: null,
-          reason,
-        });
-        console.log(`[${now.toISOString()}] Break started (${reason})`);
-      }
-      break;
-    }
-
     case "shutdown": {
-      // End the current session
+      // End work session
       if (data.currentSession) {
         data.currentSession.endTime = now.toISOString();
-        data.currentSession.totalMinutes = calculateSessionMinutes(data.currentSession);
         data.sessions.push(data.currentSession);
         data.currentSession = null;
-        console.log(`[${now.toISOString()}] Session ended (shutdown)`);
+        console.log(`[${now.toISOString()}] Work ended`);
       }
       break;
     }
   }
 
-  return data;
-}
-
-async function endSessionsWithOpenBreaks(data: WorkData): Promise<WorkData> {
-  // If current session has a break that's been open for more than 4 hours, end the session
-  if (data.currentSession && data.currentSession.breaks.length > 0) {
-    const lastBreak = data.currentSession.breaks[data.currentSession.breaks.length - 1];
-    if (!lastBreak.endTime) {
-      const breakStart = new Date(lastBreak.startTime);
-      const now = new Date();
-      const breakDurationMs = now.getTime() - breakStart.getTime();
-
-      // If break is longer than 4 hours, end the session at break start
-      if (breakDurationMs > 4 * 60 * 60 * 1000) {
-        data.currentSession.breaks.pop(); // Remove the long break
-        data.currentSession.endTime = lastBreak.startTime;
-        data.currentSession.totalMinutes = calculateSessionMinutes(data.currentSession);
-        data.sessions.push(data.currentSession);
-        data.currentSession = null;
-        console.log(`Auto-ended stale session`);
-      }
-    }
-  }
   return data;
 }
 
 async function main() {
   console.log("Work Tracker Daemon starting...");
-  console.log(`Data directory: ${join(homedir(), ".work-tracker")}`);
+  console.log(`Data: ${join(homedir(), ".work-tracker")}`);
 
   let data = await loadData();
 
-  // Clean up any stale sessions
-  data = await endSessionsWithOpenBreaks(data);
-  await saveData(data);
-
-  // Try to use Swift watcher first (more reliable), fall back to polling
   let eventStream = await startSwiftWatcher();
-
   if (!eventStream) {
-    console.log("Using polling-based event detection");
+    console.log("Using polling-based detection");
     eventStream = watchSystemEvents();
   } else {
-    console.log("Using native macOS event notifications");
+    console.log("Using native macOS notifications");
   }
 
-  // Handle graceful shutdown
   process.on("SIGINT", async () => {
     console.log("\nShutting down...");
     data = await handleEvent("shutdown", data);
@@ -217,7 +155,6 @@ async function main() {
     process.exit(0);
   });
 
-  // Main event loop
   for await (const event of eventStream) {
     data = await handleEvent(event, data);
     await saveData(data);

@@ -9,7 +9,6 @@ import {
   formatTime,
   calculateSessionMinutes,
   createSession,
-  getDataDir,
   getLogFile,
 } from "./storage";
 
@@ -51,24 +50,10 @@ async function showStatus() {
 
   const session = data.currentSession;
   const minutes = calculateSessionMinutes(session);
-  const activeBreak = session.breaks.find((b) => !b.endTime);
 
-  console.log(`Status: ${activeBreak ? "On break" : "Working"}`);
+  console.log("Status: Working");
   console.log(`Started: ${formatTime(session.startTime)}`);
   console.log(`Duration: ${formatMinutes(minutes)}`);
-
-  if (session.breaks.length > 0) {
-    const totalBreakMins = session.breaks.reduce((sum, b) => {
-      const start = new Date(b.startTime);
-      const end = b.endTime ? new Date(b.endTime) : new Date();
-      return sum + Math.round((end.getTime() - start.getTime()) / 60000);
-    }, 0);
-    console.log(`Breaks: ${session.breaks.length} (${formatMinutes(totalBreakMins)} total)`);
-  }
-
-  if (activeBreak) {
-    console.log(`\nCurrent break started: ${formatTime(activeBreak.startTime)} (${activeBreak.reason})`);
-  }
 }
 
 async function showToday() {
@@ -88,7 +73,7 @@ async function showToday() {
 
   for (const session of todayRecord.sessions) {
     const endStr = session.endTime ? formatTime(session.endTime) : "ongoing";
-    const mins = session.totalMinutes ?? calculateSessionMinutes(session);
+    const mins = calculateSessionMinutes(session);
     console.log(`  ${formatTime(session.startTime)} - ${endStr}: ${formatMinutes(mins)}`);
   }
 }
@@ -102,20 +87,24 @@ async function showReport(days: number) {
   }
 
   console.log(`Work Report (last ${days} days)\n`);
-  console.log("Date        | Hours | Sessions");
-  console.log("------------|-------|----------");
+  console.log("Date        | Start | End   | Hours");
+  console.log("------------|-------|-------|------");
 
   let totalMinutes = 0;
   let totalDays = 0;
 
   for (const record of records) {
-    const hours = (record.totalMinutes / 60).toFixed(1).padStart(5);
-    console.log(`${record.date} | ${hours} | ${record.sessions.length}`);
+    for (const session of record.sessions) {
+      const start = formatTime(session.startTime);
+      const end = session.endTime ? formatTime(session.endTime) : "now  ";
+      const hours = (calculateSessionMinutes(session) / 60).toFixed(1).padStart(5);
+      console.log(`${session.date} | ${start} | ${end} | ${hours}`);
+    }
     totalMinutes += record.totalMinutes;
     totalDays++;
   }
 
-  console.log("------------|-------|----------");
+  console.log("------------|-------|-------|------");
   console.log(`Total: ${formatMinutes(totalMinutes)} over ${totalDays} days`);
   console.log(`Average: ${formatMinutes(Math.round(totalMinutes / totalDays))} per day`);
 }
@@ -154,9 +143,8 @@ async function manualStop() {
 
   const now = new Date();
   data.currentSession.endTime = now.toISOString();
-  data.currentSession.totalMinutes = calculateSessionMinutes(data.currentSession);
+  const minutes = calculateSessionMinutes(data.currentSession);
 
-  const minutes = data.currentSession.totalMinutes;
   data.sessions.push(data.currentSession);
   data.currentSession = null;
 
@@ -184,15 +172,13 @@ async function showLog(lines: number = 20) {
 }
 
 async function startDaemon() {
-  // Import and run the daemon
-  const daemon = await import("./daemon");
+  await import("./daemon");
 }
 
 async function main() {
   const args = process.argv.slice(2);
   const command = args[0] || "status";
 
-  // Parse options
   let days = 7;
   let outputFile: string | undefined;
 

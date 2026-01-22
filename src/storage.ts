@@ -1,10 +1,9 @@
 import { homedir } from "os";
 import { join } from "path";
-import type { WorkData, WorkSession, Break, DailyRecord } from "./types";
+import type { WorkData, WorkSession, DailyRecord } from "./types";
 
 const DATA_DIR = join(homedir(), ".work-tracker");
 const DATA_FILE = join(DATA_DIR, "sessions.json");
-const STATE_FILE = join(DATA_DIR, "daemon-state.json");
 const LOG_FILE = join(DATA_DIR, "events.log");
 
 export function getDataDir(): string {
@@ -16,11 +15,9 @@ export function getLogFile(): string {
 }
 
 async function ensureDataDir(): Promise<void> {
-  const dir = Bun.file(DATA_DIR);
   try {
     await Bun.write(join(DATA_DIR, ".keep"), "");
   } catch {
-    // Directory might not exist, create it
     const proc = Bun.spawn(["mkdir", "-p", DATA_DIR]);
     await proc.exited;
   }
@@ -46,7 +43,6 @@ export async function loadData(): Promise<WorkData> {
     const content = await file.text();
     return JSON.parse(content) as WorkData;
   } catch {
-    // Corrupted file, backup and start fresh
     const backup = `${DATA_FILE}.backup.${Date.now()}`;
     await Bun.write(backup, await file.text());
     const initial: WorkData = {
@@ -78,25 +74,13 @@ export function createSession(startTime: Date = new Date()): WorkSession {
     date: getDateString(startTime),
     startTime: startTime.toISOString(),
     endTime: null,
-    breaks: [],
-    totalMinutes: null,
   };
 }
 
 export function calculateSessionMinutes(session: WorkSession): number {
   const start = new Date(session.startTime);
   const end = session.endTime ? new Date(session.endTime) : new Date();
-
-  let totalMs = end.getTime() - start.getTime();
-
-  // Subtract break time
-  for (const brk of session.breaks) {
-    const breakStart = new Date(brk.startTime);
-    const breakEnd = brk.endTime ? new Date(brk.endTime) : new Date();
-    totalMs -= breakEnd.getTime() - breakStart.getTime();
-  }
-
-  return Math.max(0, Math.round(totalMs / 60000));
+  return Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000));
 }
 
 export function formatMinutes(minutes: number): string {
@@ -118,10 +102,9 @@ export async function getDailyRecords(days: number = 30): Promise<DailyRecord[]>
   const data = await loadData();
   const records: Map<string, DailyRecord> = new Map();
 
-  // Group sessions by date
   for (const session of data.sessions) {
     const existing = records.get(session.date);
-    const sessionMinutes = session.totalMinutes ?? calculateSessionMinutes(session);
+    const sessionMinutes = calculateSessionMinutes(session);
 
     if (existing) {
       existing.sessions.push(session);
@@ -135,7 +118,6 @@ export async function getDailyRecords(days: number = 30): Promise<DailyRecord[]>
     }
   }
 
-  // Include current session if exists
   if (data.currentSession) {
     const existing = records.get(data.currentSession.date);
     const sessionMinutes = calculateSessionMinutes(data.currentSession);
@@ -152,7 +134,6 @@ export async function getDailyRecords(days: number = 30): Promise<DailyRecord[]>
     }
   }
 
-  // Sort by date descending and limit
   return Array.from(records.values())
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, days);
@@ -171,20 +152,13 @@ export async function logEvent(event: string, details?: string): Promise<void> {
 export async function exportToCsv(days: number = 30): Promise<string> {
   const records = await getDailyRecords(days);
 
-  const lines = ["Date,Start Time,End Time,Break Minutes,Total Hours"];
+  const lines = ["Date,Start Time,End Time,Total Hours"];
 
   for (const record of records.reverse()) {
     for (const session of record.sessions) {
-      const breakMinutes = session.breaks.reduce((sum, brk) => {
-        const start = new Date(brk.startTime);
-        const end = brk.endTime ? new Date(brk.endTime) : new Date();
-        return sum + Math.round((end.getTime() - start.getTime()) / 60000);
-      }, 0);
-
-      const totalHours = ((session.totalMinutes ?? calculateSessionMinutes(session)) / 60).toFixed(2);
-
+      const totalHours = (calculateSessionMinutes(session) / 60).toFixed(2);
       lines.push(
-        `${session.date},${formatTime(session.startTime)},${session.endTime ? formatTime(session.endTime) : "ongoing"},${breakMinutes},${totalHours}`
+        `${session.date},${formatTime(session.startTime)},${session.endTime ? formatTime(session.endTime) : "ongoing"},${totalHours}`
       );
     }
   }
