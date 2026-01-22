@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Label for the LaunchAgent -->
+    <key>Label</key>
+    <string>com.worktracker.daemon</string>
+
+    <!-- Path to the daemon executable -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>__INSTALL_PATH__/work-tracker-daemon</string>
+    </array>
+
+    <!-- Start at login -->
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- Keep it running -->
+    <key>KeepAlive</key>
+    <true/>
+
+    <!-- Restart if it crashes -->
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+
+    <!-- Log output -->
+    <key>StandardOutPath</key>
+    <string>__HOME__/.work-tracker/daemon.log</string>
+    <key>StandardErrorPath</key>
+    <string>__HOME__/.work-tracker/daemon.error.log</string>
+
+    <!-- Working directory -->
+    <key>WorkingDirectory</key>
+    <string>__HOME__/.work-tracker</string>
+
+    <!-- Environment variables -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
+    </dict>
+</dict>
+</plist>

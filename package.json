@@ -1,0 +1,19 @@
+{
+  "name": "work-tracker",
+  "version": "1.0.0",
+  "description": "Automatic work time tracker for macOS",
+  "type": "module",
+  "bin": {
+    "work-tracker": "./src/cli.ts"
+  },
+  "scripts": {
+    "start": "bun run src/daemon.ts",
+    "cli": "bun run src/cli.ts",
+    "build": "bun build --compile --outfile=work-tracker src/cli.ts && bun build --compile --outfile=work-tracker-daemon src/daemon.ts"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.0.0"
+  }
+}
