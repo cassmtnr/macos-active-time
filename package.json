@@ -1,7 +1,7 @@
 {
-  "name": "work-tracker",
+  "name": "macos-work-tracker",
   "version": "1.0.0",
-  "description": "Automatic work time tracker for macOS",
+  "description": "Automatic work time tracker for macOS - tracks screen lock/unlock events",
   "type": "module",
   "bin": {
     "work-tracker": "./src/cli.ts"
@@ -9,8 +9,38 @@
   "scripts": {
     "start": "bun run src/daemon.ts",
     "cli": "bun run src/cli.ts",
-    "build": "bun build --compile --outfile=work-tracker src/cli.ts && bun build --compile --outfile=work-tracker-daemon src/daemon.ts"
+    "build": "bun build --compile --outfile=work-tracker src/cli.ts && bun build --compile --outfile=work-tracker-daemon src/daemon.ts",
+    "prepublishOnly": "echo 'Ready to publish'"
   },
+  "keywords": [
+    "work-tracker",
+    "time-tracking",
+    "macos",
+    "productivity",
+    "bun",
+    "bamboohr"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cassmtnr/working-time.git"
+  },
+  "bugs": {
+    "url": "https://github.com/cassmtnr/working-time/issues"
+  },
+  "homepage": "https://github.com/cassmtnr/working-time#readme",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "os": ["darwin"],
+  "files": [
+    "src/**/*",
+    "config/**/*",
+    "install.sh",
+    "uninstall.sh",
+    "README.md"
+  ],
   "dependencies": {},
   "devDependencies": {
     "@types/bun": "latest",

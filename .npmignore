@@ -1,0 +1,19 @@
+# Git
+.git
+.gitignore
+
+# GitHub
+.github
+
+# Build artifacts
+dist
+work-tracker
+work-tracker-daemon
+
+# Dev files
+*.log
+.DS_Store
+node_modules
+
+# Data files (should not be published)
+sessions.json
