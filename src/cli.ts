@@ -10,6 +10,7 @@ import {
   calculateSessionMinutes,
   createSession,
   getLogFile,
+  generateSessionId,
 } from "./storage";
 
 const HELP = `
@@ -25,19 +26,51 @@ COMMANDS:
   export          Export to CSV format
   start           Manually start a work session
   stop            Manually stop the current session
+  add             Add a past work session
+  edit            Edit an existing session
+  delete          Delete a session
+  list            List sessions for a date (for editing/deleting)
   log             Show recent event log
   daemon          Start the background daemon
   help            Show this help message
 
 OPTIONS:
-  --days, -d <n>  Number of days for report/export (default: 7)
-  --output, -o    Output file for export
+  --days, -d <n>      Number of days for report/export (default: 7)
+  --output, -o        Output file for export
+  --date              Date for add/edit/delete (YYYY-MM-DD, default: today)
+  --start             Start time (HH:MM)
+  --end               End time (HH:MM)
+  --id                Session ID for edit/delete
 
 EXAMPLES:
   work-tracker status
   work-tracker report --days 30
   work-tracker export --days 30 --output hours.csv
+
+  # Add a past session
+  work-tracker add --date 2026-01-20 --start 09:00 --end 17:30
+
+  # List sessions for a date to get IDs
+  work-tracker list --date 2026-01-20
+
+  # Edit a session (use ID from list)
+  work-tracker edit --id 1706012345-abc --start 09:30
+  work-tracker edit --id 1706012345-abc --end 18:00
+
+  # Delete a session
+  work-tracker delete --id 1706012345-abc
 `;
+
+function parseTime(date: string, time: string): string {
+  const [hours, minutes] = time.split(":").map(Number);
+  const d = new Date(`${date}T00:00:00`);
+  d.setHours(hours, minutes, 0, 0);
+  return d.toISOString();
+}
+
+function getTodayDate(): string {
+  return new Date().toISOString().split("T")[0];
+}
 
 async function showStatus() {
   const data = await loadData();
@@ -152,6 +185,112 @@ async function manualStop() {
   console.log(`Stopped work session. Duration: ${formatMinutes(minutes)}`);
 }
 
+async function addSession(date: string, startTime: string, endTime: string) {
+  if (!startTime || !endTime) {
+    console.log("Error: --start and --end are required for add command");
+    console.log("Example: work-tracker add --date 2026-01-20 --start 09:00 --end 17:30");
+    process.exit(1);
+  }
+
+  const data = await loadData();
+
+  const session = {
+    id: generateSessionId(),
+    date,
+    startTime: parseTime(date, startTime),
+    endTime: parseTime(date, endTime),
+  };
+
+  data.sessions.push(session);
+  data.sessions.sort((a, b) => a.startTime.localeCompare(b.startTime));
+
+  await saveData(data);
+
+  const minutes = calculateSessionMinutes(session);
+  console.log(`Added session: ${date} ${startTime} - ${endTime} (${formatMinutes(minutes)})`);
+}
+
+async function listSessions(date: string) {
+  const data = await loadData();
+  const sessions = data.sessions.filter((s) => s.date === date);
+
+  if (sessions.length === 0) {
+    console.log(`No sessions found for ${date}`);
+    return;
+  }
+
+  console.log(`Sessions for ${date}:\n`);
+  console.log("ID                      | Start | End   | Hours");
+  console.log("------------------------|-------|-------|------");
+
+  for (const session of sessions) {
+    const start = formatTime(session.startTime);
+    const end = session.endTime ? formatTime(session.endTime) : "now  ";
+    const hours = (calculateSessionMinutes(session) / 60).toFixed(1).padStart(5);
+    const shortId = session.id.substring(0, 22).padEnd(22);
+    console.log(`${shortId} | ${start} | ${end} | ${hours}`);
+  }
+
+  console.log("\nUse the ID with --id flag for edit/delete commands");
+}
+
+async function editSession(id: string, date?: string, startTime?: string, endTime?: string) {
+  if (!id) {
+    console.log("Error: --id is required for edit command");
+    console.log("Use 'work-tracker list --date YYYY-MM-DD' to find session IDs");
+    process.exit(1);
+  }
+
+  const data = await loadData();
+  const session = data.sessions.find((s) => s.id.startsWith(id));
+
+  if (!session) {
+    console.log(`Error: Session not found with ID starting with '${id}'`);
+    process.exit(1);
+  }
+
+  const sessionDate = date || session.date;
+
+  if (date) {
+    session.date = date;
+  }
+  if (startTime) {
+    session.startTime = parseTime(sessionDate, startTime);
+  }
+  if (endTime) {
+    session.endTime = parseTime(sessionDate, endTime);
+  }
+
+  data.sessions.sort((a, b) => a.startTime.localeCompare(b.startTime));
+  await saveData(data);
+
+  const minutes = calculateSessionMinutes(session);
+  console.log(`Updated session: ${session.date} ${formatTime(session.startTime)} - ${session.endTime ? formatTime(session.endTime) : "ongoing"} (${formatMinutes(minutes)})`);
+}
+
+async function deleteSession(id: string) {
+  if (!id) {
+    console.log("Error: --id is required for delete command");
+    console.log("Use 'work-tracker list --date YYYY-MM-DD' to find session IDs");
+    process.exit(1);
+  }
+
+  const data = await loadData();
+  const index = data.sessions.findIndex((s) => s.id.startsWith(id));
+
+  if (index === -1) {
+    console.log(`Error: Session not found with ID starting with '${id}'`);
+    process.exit(1);
+  }
+
+  const session = data.sessions[index];
+  data.sessions.splice(index, 1);
+
+  await saveData(data);
+
+  console.log(`Deleted session: ${session.date} ${formatTime(session.startTime)} - ${session.endTime ? formatTime(session.endTime) : "ongoing"}`);
+}
+
 async function showLog(lines: number = 20) {
   const logFile = getLogFile();
   const file = Bun.file(logFile);
@@ -179,8 +318,13 @@ async function main() {
   const args = process.argv.slice(2);
   const command = args[0] || "status";
 
+  // Parse options
   let days = 7;
   let outputFile: string | undefined;
+  let date = getTodayDate();
+  let startTime: string | undefined;
+  let endTime: string | undefined;
+  let id: string | undefined;
 
   for (let i = 0; i < args.length; i++) {
     if ((args[i] === "--days" || args[i] === "-d") && args[i + 1]) {
@@ -189,6 +333,22 @@ async function main() {
     }
     if ((args[i] === "--output" || args[i] === "-o") && args[i + 1]) {
       outputFile = args[i + 1];
+      i++;
+    }
+    if (args[i] === "--date" && args[i + 1]) {
+      date = args[i + 1];
+      i++;
+    }
+    if (args[i] === "--start" && args[i + 1]) {
+      startTime = args[i + 1];
+      i++;
+    }
+    if (args[i] === "--end" && args[i + 1]) {
+      endTime = args[i + 1];
+      i++;
+    }
+    if (args[i] === "--id" && args[i + 1]) {
+      id = args[i + 1];
       i++;
     }
   }
@@ -211,6 +371,18 @@ async function main() {
       break;
     case "stop":
       await manualStop();
+      break;
+    case "add":
+      await addSession(date, startTime!, endTime!);
+      break;
+    case "list":
+      await listSessions(date);
+      break;
+    case "edit":
+      await editSession(id!, date, startTime, endTime);
+      break;
+    case "delete":
+      await deleteSession(id!);
       break;
     case "log":
       await showLog();
