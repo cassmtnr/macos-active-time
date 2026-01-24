@@ -1,164 +1,127 @@
 #!/usr/bin/env bun
+/**
+ * Work Tracker Daemon - background process that monitors screen lock/unlock.
+ *
+ * This is the main background service that:
+ * 1. Monitors screen lock/unlock events
+ * 2. Creates work sessions when you unlock (start working)
+ * 3. Ends work sessions when you lock (stop working)
+ * 4. Saves everything to disk
+ *
+ * HOW TO RUN:
+ *   bun run src/daemon.ts
+ *   OR: work-tracker daemon
+ *
+ * The daemon is typically started automatically via LaunchAgent at login.
+ */
 
-import {
-  loadData,
-  saveData,
-  createSession,
-  calculateSessionMinutes,
-  logEvent,
-  getDateString,
-} from "./storage";
-import { watchSystemEvents, getSwiftNotificationWatcher } from "./macos-events";
-import type { EventType, WorkData } from "./types";
-import { join } from "path";
-import { homedir } from "os";
+import { load, save, createSession, appendLog, toDateStr } from "./storage";
+import { watchEvents } from "./macos-events";
+import { DATA_DIR } from "./config";
+import type { Store, Event } from "./types";
 
-const SWIFT_HELPER_PATH = join(homedir(), ".work-tracker", "event-watcher");
-
-async function compileSwiftHelper(): Promise<boolean> {
-  const swiftCode = getSwiftNotificationWatcher();
-  const swiftFile = join(homedir(), ".work-tracker", "event-watcher.swift");
-
-  await Bun.write(swiftFile, swiftCode);
-
-  console.log("Compiling Swift event watcher...");
-  const proc = Bun.spawn(["swiftc", "-o", SWIFT_HELPER_PATH, swiftFile], {
-    stdout: "inherit",
-    stderr: "inherit",
-  });
-
-  const exitCode = await proc.exited;
-  return exitCode === 0;
-}
-
-async function startSwiftWatcher(): Promise<AsyncGenerator<EventType> | null> {
-  const helperFile = Bun.file(SWIFT_HELPER_PATH);
-  if (!(await helperFile.exists())) {
-    const compiled = await compileSwiftHelper();
-    if (!compiled) {
-      console.log("Failed to compile Swift helper, falling back to polling");
-      return null;
-    }
-  }
-
-  const proc = Bun.spawn([SWIFT_HELPER_PATH], {
-    stdout: "pipe",
-    stderr: "inherit",
-  });
-
-  async function* eventGenerator(): AsyncGenerator<EventType> {
-    const reader = proc.stdout.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) return;
-
-      buffer += decoder.decode(value, { stream: true });
-      if (buffer.includes("READY")) {
-        buffer = buffer.replace("READY", "").trim();
-        yield "startup";
-        break;
-      }
-    }
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) return;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
-
-      for (const line of lines) {
-        if (line.startsWith("EVENT:")) {
-          const event = line.replace("EVENT:", "").trim() as EventType;
-          yield event;
-        }
-      }
-    }
-  }
-
-  return eventGenerator();
-}
-
-async function handleEvent(event: EventType, data: WorkData): Promise<WorkData> {
+/**
+ * Processes a single event and returns the updated store.
+ *
+ * This function is PURE - it doesn't modify the input, it returns a new object.
+ * This makes it easier to reason about and test.
+ *
+ * @param event - The event that occurred
+ * @param store - Current state
+ * @returns New state after processing the event
+ */
+function processEvent(event: Event, store: Store): Store {
   const now = new Date();
-  const today = getDateString(now);
+  const today = toDateStr(now);
 
-  await logEvent(event);
+  // Create a copy of the store (don't mutate the original)
+  const updated: Store = {
+    ...store,
+    sessions: [...store.sessions],
+    currentSession: store.currentSession,
+  };
 
-  switch (event) {
-    case "startup":
-    case "unlock": {
-      // Start work session
-      if (!data.currentSession) {
-        data.currentSession = createSession(now);
-        console.log(`[${now.toISOString()}] Work started`);
-      }
-      // Handle day change
-      if (data.currentSession && data.currentSession.date !== today) {
-        const midnight = new Date(now);
-        midnight.setHours(0, 0, 0, 0);
+  // Handle work START events (startup or unlock)
+  if (event === "startup" || event === "unlock") {
+    if (!updated.currentSession) {
+      // No active session - start a new one
+      updated.currentSession = createSession(now);
+      console.log(`[${now.toISOString()}] Work started`);
+    } else if (updated.currentSession.date !== today) {
+      // Day changed while we were working - close old session, start new one
+      // This handles the case where you leave your computer unlocked overnight
+      const midnight = new Date(now);
+      midnight.setHours(0, 0, 0, 0);
 
-        data.currentSession.endTime = midnight.toISOString();
-        data.sessions.push(data.currentSession);
-
-        data.currentSession = createSession(now);
-        console.log(`[${now.toISOString()}] New day - new session`);
-      }
-      break;
+      updated.currentSession.endTime = midnight.toISOString();
+      updated.sessions.push(updated.currentSession);
+      updated.currentSession = createSession(now);
+      console.log(`[${now.toISOString()}] New day - new session`);
     }
-
-    case "lock":
-    case "shutdown": {
-      // End work session
-      if (data.currentSession) {
-        data.currentSession.endTime = now.toISOString();
-        data.sessions.push(data.currentSession);
-        data.currentSession = null;
-        console.log(`[${now.toISOString()}] Work ended`);
-      }
-      break;
-    }
+    // If we already have a session for today, do nothing (already working)
   }
 
-  return data;
+  // Handle work END events (lock)
+  if (event === "lock") {
+    if (updated.currentSession) {
+      // End the current session
+      updated.currentSession.endTime = now.toISOString();
+      updated.sessions.push(updated.currentSession);
+      updated.currentSession = null;
+      console.log(`[${now.toISOString()}] Work ended`);
+    }
+    // If no active session, do nothing (already not working)
+  }
+
+  return updated;
 }
 
-async function main() {
+/**
+ * Gracefully shuts down the daemon.
+ * Ensures current session is saved before exiting.
+ */
+async function shutdown(store: Store): Promise<void> {
+  console.log("\nShutting down...");
+
+  // If there's an active session, end it now
+  if (store.currentSession) {
+    store.currentSession.endTime = new Date().toISOString();
+    store.sessions.push(store.currentSession);
+    store.currentSession = null;
+  }
+
+  await save(store);
+  process.exit(0);
+}
+
+/**
+ * Main entry point for the daemon.
+ */
+async function main(): Promise<void> {
   console.log("Work Tracker Daemon starting...");
-  console.log(`Data: ${join(homedir(), ".work-tracker")}`);
+  console.log(`Data: ${DATA_DIR}`);
 
-  let data = await loadData();
+  // Load existing data
+  let store = await load();
 
-  let eventStream = await startSwiftWatcher();
-  if (!eventStream) {
-    console.log("Using polling-based detection");
-    eventStream = watchSystemEvents();
-  } else {
-    console.log("Using native macOS notifications");
-  }
+  // Set up graceful shutdown handlers
+  // These ensure we save data when the process is killed
+  const handleShutdown = () => shutdown(store);
+  process.on("SIGINT", handleShutdown);  // Ctrl+C
+  process.on("SIGTERM", handleShutdown); // kill command
 
-  process.on("SIGINT", async () => {
-    console.log("\nShutting down...");
-    data = await handleEvent("shutdown", data);
-    await saveData(data);
-    process.exit(0);
-  });
+  // Main event loop - runs forever
+  for await (const event of watchEvents()) {
+    // Log the event for debugging
+    await appendLog(event);
 
-  process.on("SIGTERM", async () => {
-    console.log("\nShutting down...");
-    data = await handleEvent("shutdown", data);
-    await saveData(data);
-    process.exit(0);
-  });
+    // Process the event and update state
+    store = processEvent(event, store);
 
-  for await (const event of eventStream) {
-    data = await handleEvent(event, data);
-    await saveData(data);
+    // Save to disk after every event
+    await save(store);
   }
 }
 
+// Start the daemon
 main().catch(console.error);

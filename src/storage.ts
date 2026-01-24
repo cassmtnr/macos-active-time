@@ -1,167 +1,184 @@
-import { homedir } from "os";
-import { join } from "path";
-import type { WorkData, WorkSession, DailyRecord } from "./types";
+/**
+ * Storage module - handles reading/writing data to disk.
+ *
+ * This module is responsible for:
+ * - Loading and saving the session data (sessions.json)
+ * - Appending to the event log (events.log)
+ * - Helper functions for working with dates, times, and durations
+ *
+ * All data is stored in ~/.work-tracker/
+ */
 
-const DATA_DIR = join(homedir(), ".work-tracker");
-const DATA_FILE = join(DATA_DIR, "sessions.json");
-const LOG_FILE = join(DATA_DIR, "events.log");
+import { mkdir } from "fs/promises";
+import { DATA_DIR, DATA_FILE, LOG_FILE, MS_PER_MINUTE } from "./config";
+import type { Store, Session } from "./types";
 
-export function getDataDir(): string {
-  return DATA_DIR;
+/** Empty store used when no data exists or data is corrupted */
+const EMPTY_STORE: Store = { version: 1, sessions: [], currentSession: null };
+
+/**
+ * Creates the data directory if it doesn't exist.
+ * Uses recursive: true so it won't fail if directory already exists.
+ */
+async function ensureDir(): Promise<void> {
+  await mkdir(DATA_DIR, { recursive: true });
 }
 
-export function getLogFile(): string {
-  return LOG_FILE;
-}
+// ============================================================================
+// DATA PERSISTENCE
+// ============================================================================
 
-async function ensureDataDir(): Promise<void> {
-  try {
-    await Bun.write(join(DATA_DIR, ".keep"), "");
-  } catch {
-    const proc = Bun.spawn(["mkdir", "-p", DATA_DIR]);
-    await proc.exited;
-  }
-}
-
-export async function loadData(): Promise<WorkData> {
-  await ensureDataDir();
-
+/**
+ * Loads the session data from disk.
+ *
+ * - Creates empty store if file doesn't exist
+ * - If file is corrupted, backs it up and creates new empty store
+ *
+ * @returns The loaded store data
+ */
+export async function load(): Promise<Store> {
+  await ensureDir();
   const file = Bun.file(DATA_FILE);
-  const exists = await file.exists();
 
-  if (!exists) {
-    const initial: WorkData = {
-      version: 1,
-      sessions: [],
-      currentSession: null,
-    };
-    await saveData(initial);
-    return initial;
+  // If file doesn't exist, create it with empty data
+  if (!(await file.exists())) {
+    await save(EMPTY_STORE);
+    return EMPTY_STORE;
   }
 
+  // Try to parse existing file
   try {
-    const content = await file.text();
-    return JSON.parse(content) as WorkData;
+    return await file.json();
   } catch {
-    const backup = `${DATA_FILE}.backup.${Date.now()}`;
-    await Bun.write(backup, await file.text());
-    const initial: WorkData = {
-      version: 1,
-      sessions: [],
-      currentSession: null,
-    };
-    await saveData(initial);
-    return initial;
+    // File is corrupted - backup and start fresh
+    await Bun.write(`${DATA_FILE}.backup.${Date.now()}`, await file.text());
+    await save(EMPTY_STORE);
+    return EMPTY_STORE;
   }
 }
 
-export async function saveData(data: WorkData): Promise<void> {
-  await ensureDataDir();
-  await Bun.write(DATA_FILE, JSON.stringify(data, null, 2));
+/**
+ * Saves the session data to disk.
+ *
+ * @param store - The data to save
+ */
+export async function save(store: Store): Promise<void> {
+  await ensureDir();
+  await Bun.write(DATA_FILE, JSON.stringify(store, null, 2));
 }
 
-export function generateSessionId(): string {
-  return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+/**
+ * Appends a line to the event log.
+ * Format: [ISO_TIMESTAMP] message
+ *
+ * @param message - The event to log (e.g., "lock", "unlock")
+ */
+export async function appendLog(message: string): Promise<void> {
+  await ensureDir();
+  const line = `[${new Date().toISOString()}] ${message}\n`;
+  await Bun.write(LOG_FILE, line, { append: true });
 }
 
-export function getDateString(date: Date = new Date()): string {
-  return date.toISOString().split("T")[0];
+/**
+ * Reads the last N lines from the event log.
+ *
+ * @param lines - Number of lines to return (default: 20)
+ * @returns Array of log lines, or empty array if log doesn't exist
+ */
+export async function readLog(lines = 20): Promise<string[]> {
+  const file = Bun.file(LOG_FILE);
+  if (!(await file.exists())) return [];
+  const content = await file.text();
+  return content.trim().split("\n").slice(-lines);
 }
 
-export function createSession(startTime: Date = new Date()): WorkSession {
+// ============================================================================
+// SESSION HELPERS
+// ============================================================================
+
+/**
+ * Creates a new work session starting now.
+ *
+ * @param time - Start time (defaults to now)
+ * @returns A new Session object
+ */
+export function createSession(time = new Date()): Session {
   return {
-    id: generateSessionId(),
-    date: getDateString(startTime),
-    startTime: startTime.toISOString(),
+    id: generateId(),
+    date: toDateStr(time),
+    startTime: time.toISOString(),
     endTime: null,
   };
 }
 
-export function calculateSessionMinutes(session: WorkSession): number {
-  const start = new Date(session.startTime);
-  const end = session.endTime ? new Date(session.endTime) : new Date();
-  return Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000));
+/**
+ * Generates a unique session ID.
+ * Format: timestamp-randomstring (e.g., "1706012345678-abc1234")
+ */
+export function generateId(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-export function formatMinutes(minutes: number): string {
-  const hours = Math.floor(minutes / 60);
-  const mins = minutes % 60;
-  return `${hours}h ${mins}m`;
+// ============================================================================
+// DATE/TIME FORMATTING
+// ============================================================================
+
+/**
+ * Converts a Date to YYYY-MM-DD format.
+ *
+ * @example toDateStr(new Date()) // "2026-01-22"
+ */
+export function toDateStr(date = new Date()): string {
+  return date.toISOString().split("T")[0];
 }
 
-export function formatTime(isoString: string): string {
-  const date = new Date(isoString);
-  return date.toLocaleTimeString("en-US", {
+/**
+ * Extracts HH:MM from an ISO timestamp.
+ *
+ * @example toTimeStr("2026-01-22T09:15:00.000Z") // "09:15"
+ */
+export function toTimeStr(iso: string): string {
+  return new Date(iso).toLocaleTimeString("en-US", {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
   });
 }
 
-export async function getDailyRecords(days: number = 30): Promise<DailyRecord[]> {
-  const data = await loadData();
-  const records: Map<string, DailyRecord> = new Map();
-
-  for (const session of data.sessions) {
-    const existing = records.get(session.date);
-    const sessionMinutes = calculateSessionMinutes(session);
-
-    if (existing) {
-      existing.sessions.push(session);
-      existing.totalMinutes += sessionMinutes;
-    } else {
-      records.set(session.date, {
-        date: session.date,
-        sessions: [session],
-        totalMinutes: sessionMinutes,
-      });
-    }
-  }
-
-  if (data.currentSession) {
-    const existing = records.get(data.currentSession.date);
-    const sessionMinutes = calculateSessionMinutes(data.currentSession);
-
-    if (existing) {
-      existing.sessions.push(data.currentSession);
-      existing.totalMinutes += sessionMinutes;
-    } else {
-      records.set(data.currentSession.date, {
-        date: data.currentSession.date,
-        sessions: [data.currentSession],
-        totalMinutes: sessionMinutes,
-      });
-    }
-  }
-
-  return Array.from(records.values())
-    .sort((a, b) => b.date.localeCompare(a.date))
-    .slice(0, days);
+/**
+ * Calculates minutes between two timestamps.
+ *
+ * @param start - ISO timestamp for start
+ * @param end - ISO timestamp for end (if null, uses current time)
+ * @returns Number of minutes (rounded, minimum 0)
+ */
+export function minutesBetween(start: string, end: string | null): number {
+  const startMs = new Date(start).getTime();
+  const endMs = end ? new Date(end).getTime() : Date.now();
+  return Math.max(0, Math.round((endMs - startMs) / MS_PER_MINUTE));
 }
 
-export async function logEvent(event: string, details?: string): Promise<void> {
-  await ensureDataDir();
-  const timestamp = new Date().toISOString();
-  const line = `[${timestamp}] ${event}${details ? `: ${details}` : ""}\n`;
-
-  const file = Bun.file(LOG_FILE);
-  const existing = (await file.exists()) ? await file.text() : "";
-  await Bun.write(LOG_FILE, existing + line);
+/**
+ * Formats minutes as "Xh Ym".
+ *
+ * @example formatDuration(90) // "1h 30m"
+ * @example formatDuration(45) // "0h 45m"
+ */
+export function formatDuration(mins: number): string {
+  return `${Math.floor(mins / 60)}h ${mins % 60}m`;
 }
 
-export async function exportToCsv(days: number = 30): Promise<string> {
-  const records = await getDailyRecords(days);
-
-  const lines = ["Date,Start Time,End Time,Total Hours"];
-
-  for (const record of records.reverse()) {
-    for (const session of record.sessions) {
-      const totalHours = (calculateSessionMinutes(session) / 60).toFixed(2);
-      lines.push(
-        `${session.date},${formatTime(session.startTime)},${session.endTime ? formatTime(session.endTime) : "ongoing"},${totalHours}`
-      );
-    }
-  }
-
-  return lines.join("\n");
+/**
+ * Parses a date + time string into an ISO timestamp.
+ * Used for manual session entry (e.g., "2026-01-22" + "09:00").
+ *
+ * @param date - Date in YYYY-MM-DD format
+ * @param time - Time in HH:MM format
+ * @returns ISO timestamp string
+ */
+export function parseTimeToISO(date: string, time: string): string {
+  const [hours, minutes] = time.split(":").map(Number);
+  const d = new Date(`${date}T00:00:00`);
+  d.setHours(hours, minutes, 0, 0);
+  return d.toISOString();
 }

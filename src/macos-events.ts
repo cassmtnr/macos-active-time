@@ -1,90 +1,84 @@
-import type { EventType } from "./types";
+/**
+ * macOS Event Detection - monitors screen lock/unlock state.
+ *
+ * HOW IT WORKS:
+ * 1. Uses Python + PyObjC (Quartz framework) to check if screen is locked
+ * 2. Polls every 5 seconds to detect changes
+ * 3. Yields events when lock state changes
+ *
+ * WHY PYTHON?
+ * macOS doesn't expose screen lock state through simple shell commands.
+ * Python's Quartz bindings (pre-installed on macOS) provide easy access
+ * to CGSessionCopyCurrentDictionary which contains the lock state.
+ */
+
+import { POLL_INTERVAL_MS } from "./config";
+import type { Event } from "./types";
 
 /**
- * Check if screen is currently locked using CGSession
+ * Python script that checks if the screen is locked.
+ * Returns "1" if locked, "0" if unlocked.
+ *
+ * CGSessionCopyCurrentDictionary returns a dictionary with session info.
+ * The "CGSSessionScreenIsLocked" key tells us if the screen is locked.
  */
-export async function isScreenLocked(): Promise<boolean> {
-  try {
-    const proc = Bun.spawn(
-      ["python3", "-c", `
+const PYTHON_CHECK_LOCK = `
 import Quartz
-session = Quartz.CGSessionCopyCurrentDictionary()
-if session:
-    locked = session.get("CGSSessionScreenIsLocked", 0)
-    print(1 if locked else 0)
-else:
-    print(0)
-`],
-      { stdout: "pipe" }
-    );
+s = Quartz.CGSessionCopyCurrentDictionary()
+print(1 if s and s.get("CGSSessionScreenIsLocked", 0) else 0)
+`;
+
+/**
+ * Checks if the macOS screen is currently locked.
+ *
+ * Spawns a Python process to query the Quartz framework.
+ * Returns false on any error (fail-safe).
+ */
+async function isLocked(): Promise<boolean> {
+  try {
+    const proc = Bun.spawn(["python3", "-c", PYTHON_CHECK_LOCK], { stdout: "pipe" });
     const output = await new Response(proc.stdout).text();
     await proc.exited;
     return output.trim() === "1";
   } catch {
-    // Fallback: check if screensaver is active
-    try {
-      const proc = Bun.spawn(["pgrep", "-x", "ScreenSaverEngine"], { stdout: "pipe" });
-      await proc.exited;
-      return proc.exitCode === 0;
-    } catch {
-      return false;
-    }
+    // If Python fails, assume not locked (fail-safe)
+    return false;
   }
 }
 
 /**
- * Watch for screen lock/unlock events via polling
+ * Async generator that yields events when screen lock state changes.
+ *
+ * USAGE:
+ *   for await (const event of watchEvents()) {
+ *     console.log(event); // "startup", "lock", or "unlock"
+ *   }
+ *
+ * EVENTS:
+ * - "startup": Yielded once when watching begins
+ * - "lock": User locked their screen
+ * - "unlock": User unlocked their screen
+ *
+ * This function runs forever (infinite loop) - it's meant to be the
+ * main loop of the daemon process.
  */
-export async function* watchSystemEvents(): AsyncGenerator<EventType> {
-  let lastLocked = await isScreenLocked();
+export async function* watchEvents(): AsyncGenerator<Event> {
+  // Check initial state
+  let wasLocked = await isLocked();
 
-  // Emit startup event (if unlocked, start working)
+  // Always emit startup event first
   yield "startup";
 
-  // Poll for lock/unlock changes every 5 seconds
+  // Poll forever, yielding events when state changes
   while (true) {
-    await Bun.sleep(5000);
+    await Bun.sleep(POLL_INTERVAL_MS);
 
-    const currentLocked = await isScreenLocked();
+    const locked = await isLocked();
 
-    if (!lastLocked && currentLocked) {
-      yield "lock";
-    } else if (lastLocked && !currentLocked) {
-      yield "unlock";
+    // Only yield if state actually changed
+    if (wasLocked !== locked) {
+      yield locked ? "lock" : "unlock";
+      wasLocked = locked;
     }
-
-    lastLocked = currentLocked;
   }
-}
-
-/**
- * Swift helper for native macOS notifications (more reliable than polling)
- */
-export function getSwiftNotificationWatcher(): string {
-  return `
-import Cocoa
-import Foundation
-
-class AppDelegate: NSObject, NSApplicationDelegate {
-    func applicationDidFinishLaunching(_ notification: Notification) {
-        let dnc = DistributedNotificationCenter.default()
-
-        dnc.addObserver(self, selector: #selector(screenLocked),
-            name: NSNotification.Name("com.apple.screenIsLocked"), object: nil)
-        dnc.addObserver(self, selector: #selector(screenUnlocked),
-            name: NSNotification.Name("com.apple.screenIsUnlocked"), object: nil)
-
-        print("READY")
-        fflush(stdout)
-    }
-
-    @objc func screenLocked() { print("EVENT:lock"); fflush(stdout) }
-    @objc func screenUnlocked() { print("EVENT:unlock"); fflush(stdout) }
-}
-
-let app = NSApplication.shared
-let delegate = AppDelegate()
-app.delegate = delegate
-app.run()
-`;
 }
