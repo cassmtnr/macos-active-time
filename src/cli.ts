@@ -17,7 +17,7 @@ import {
   toDateStr, toTimeStr, minutesBetween, formatDuration, parseTimeToISO,
   isValidDate, isValidTime,
 } from "./storage";
-import { ID_LENGTH, DEFAULT_REPORT_DAYS } from "./config";
+import { DEFAULT_REPORT_DAYS } from "./config";
 import type { Session } from "./types";
 
 // ============================================================================
@@ -308,27 +308,48 @@ async function add(date: string, startTime?: string, endTime?: string): Promise<
 
 /** Lists all sessions for a specific date */
 async function list(date: string): Promise<void> {
-  const { sessions } = await load();
+  const { sessions, currentSession } = await load();
   const filtered = sessions.filter(s => s.date === date);
+
+  // Include current session if it matches the date
+  if (currentSession && currentSession.date === date) {
+    filtered.push(currentSession);
+  }
 
   if (filtered.length === 0) {
     console.log(`No sessions for ${date}`);
     return;
   }
 
-  const idHeader = "ID".padEnd(ID_LENGTH);
-  const idSeparator = "-".repeat(ID_LENGTH);
+  // Calculate total hours
+  const totalMinutes = filtered.reduce((sum, s) => sum + sessionDuration(s), 0);
+  const totalHours = (totalMinutes / 60).toFixed(1);
+
+  // Table drawing
+  const top    = "┌──────────┬───────┬───────┬───────┐";
+  const header = "│    ID    │ Start │  End  │ Hours │";
+  const sep    = "├──────────┼───────┼───────┼───────┤";
 
   console.log(`Sessions for ${date}:\n`);
-  console.log(`${idHeader} | Start | End   | Hours`);
-  console.log(`${idSeparator}|-------|-------|------`);
+  console.log(top);
+  console.log(header);
+  console.log(sep);
 
-  for (const session of filtered) {
-    const endTime = session.endTime ? toTimeStr(session.endTime) : "now  ";
+  for (let i = 0; i < filtered.length; i++) {
+    const session = filtered[i];
+    const id = session.id.padStart(8);
+    const start = toTimeStr(session.startTime);
+    const end = session.endTime ? toTimeStr(session.endTime) : "now  ";
     const hours = (sessionDuration(session) / 60).toFixed(1).padStart(5);
-    const shortId = session.id.padEnd(ID_LENGTH);
-    console.log(`${shortId} | ${toTimeStr(session.startTime)} | ${endTime} | ${hours}`);
+    console.log(`│ ${id} │ ${start} │ ${end} │ ${hours} │`);
+    if (i < filtered.length - 1) {
+      console.log(sep);
+    }
   }
+
+  console.log("├──────────┴───────┼───────┼───────┤");
+  console.log(`                   │ Total │ ${totalHours.padStart(5)} │`);
+  console.log("                   └───────┴───────┘");
 
   console.log("\nUse --id with edit/delete commands");
 }
