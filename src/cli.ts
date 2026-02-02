@@ -198,7 +198,9 @@ async function report(days: number): Promise<void> {
   let totalMinutes = 0;
 
   for (const date of dates) {
-    for (const session of grouped.get(date)!) {
+    const sessions = grouped.get(date);
+    if (!sessions) continue;
+    for (const session of sessions) {
       const endTime = session.endTime ? toTimeStr(session.endTime) : "now  ";
       const hours = (sessionDuration(session) / 60).toFixed(1).padStart(5);
       console.log(`${session.date} | ${toTimeStr(session.startTime)} | ${endTime} | ${hours}`);
