@@ -138,18 +138,9 @@ function groupByDate(sessions: Session[]): Map<string, Session[]> {
 // COMMANDS
 // ============================================================================
 
-/** Shows current work session status */
+/** Shows current work session status (same as list for today) */
 async function status(): Promise<void> {
-  const { currentSession } = await load();
-
-  if (!currentSession) {
-    console.log("Status: Not working\n\nNo active session.");
-    return;
-  }
-
-  console.log("Status: Working");
-  console.log(`Started: ${toTimeStr(currentSession.startTime)}`);
-  console.log(`Duration: ${formatDuration(sessionDuration(currentSession))}`);
+  await list(toDateStr());
 }
 
 /** Shows today's work summary */
@@ -347,7 +338,7 @@ async function list(date: string): Promise<void> {
     }
   }
 
-  console.log("├──────────┴───────┼───────┼───────┤");
+  console.log("└──────────┴───────┼───────┼───────┤");
   console.log(`                   │ Total │ ${totalHours.padStart(5)} │`);
   console.log("                   └───────┴───────┘");
 

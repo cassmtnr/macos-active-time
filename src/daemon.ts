@@ -79,18 +79,24 @@ function processEvent(event: Event, store: Store): Store {
 /**
  * Gracefully shuts down the daemon.
  * Ensures current session is saved before exiting.
+ *
+ * Important: We reload from disk to preserve any edits made via CLI,
+ * then only update the current session status.
  */
-async function shutdown(store: Store): Promise<void> {
+async function shutdown(currentSessionId: string | null): Promise<void> {
   console.log("\nShutting down...");
 
-  // If there's an active session, end it now
-  if (store.currentSession) {
+  // Reload from disk to get any CLI edits
+  const store = await load();
+
+  // Only end the current session if it matches what we're tracking
+  if (store.currentSession && store.currentSession.id === currentSessionId) {
     store.currentSession.endTime = new Date().toISOString();
     store.sessions.push(store.currentSession);
     store.currentSession = null;
+    await save(store);
   }
 
-  await save(store);
   process.exit(0);
 }
 
@@ -104,9 +110,12 @@ async function main(): Promise<void> {
   // Load existing data
   let store = await load();
 
+  // Track current session ID for shutdown handler
+  let currentSessionId = store.currentSession?.id ?? null;
+
   // Set up graceful shutdown handlers
   // These ensure we save data when the process is killed
-  const handleShutdown = () => shutdown(store);
+  const handleShutdown = () => shutdown(currentSessionId);
   process.on("SIGINT", handleShutdown);  // Ctrl+C
   process.on("SIGTERM", handleShutdown); // kill command
 
@@ -117,6 +126,9 @@ async function main(): Promise<void> {
 
     // Process the event and update state
     store = processEvent(event, store);
+
+    // Update tracked session ID
+    currentSessionId = store.currentSession?.id ?? null;
 
     // Save to disk after every event
     await save(store);
