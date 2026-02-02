@@ -186,10 +186,10 @@ work-tracker list --date 2026-01-22
 ```
 Sessions for 2026-01-22:
 
-ID                      | Start | End   | Hours
-------------------------|-------|-------|------
-1706012345678-abc1234   | 09:15 | 12:30 |   3.3
-1706012345679-def5678   | 13:15 | 17:45 |   4.5
+ID       | Start | End   | Hours
+---------|-------|-------|------
+a1b2c3d4 | 09:15 | 12:30 |   3.3
+e5f6g7h8 | 13:15 | 17:45 |   4.5
 
 Use --id with edit/delete commands
 ```
@@ -199,17 +199,17 @@ Use --id with edit/delete commands
 Modify an existing session's start time, end time, or date.
 
 ```bash
-# Edit start time (use ID prefix - don't need full ID)
-work-tracker edit --id 1706012345678 --start 09:00
+# Edit start time
+work-tracker edit --id a1b2c3d4 --start 09:00
 
 # Edit end time
-work-tracker edit --id 1706012345678 --end 18:00
+work-tracker edit --id a1b2c3d4 --end 18:00
 
 # Edit both
-work-tracker edit --id 1706012345678 --start 08:30 --end 17:30
+work-tracker edit --id a1b2c3d4 --start 08:30 --end 17:30
 
 # Move to different date
-work-tracker edit --id 1706012345678 --date 2026-01-21 --start 09:00 --end 17:00
+work-tracker edit --id a1b2c3d4 --date 2026-01-21 --start 09:00 --end 17:00
 ```
 
 **Output:**
@@ -223,7 +223,7 @@ Remove a session permanently.
 
 ```bash
 # Delete by ID (prefix is enough)
-work-tracker delete --id 1706012345678
+work-tracker delete --id a1b2c3d4
 ```
 
 **Output:**
@@ -285,7 +285,7 @@ work-tracker --help
 | `--date YYYY-MM-DD` | Target date for add/list/edit | `--date 2026-01-22` |
 | `--start HH:MM` | Start time | `--start 09:00` |
 | `--end HH:MM` | End time | `--end 17:30` |
-| `--id ID` | Session ID for edit/delete | `--id 1706012345678` |
+| `--id ID` | Session ID for edit/delete | `--id a1b2c3d4` |
 
 ## Data Storage
 

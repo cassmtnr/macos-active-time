@@ -17,7 +17,7 @@ import {
   toDateStr, toTimeStr, minutesBetween, formatDuration, parseTimeToISO,
   isValidDate, isValidTime,
 } from "./storage";
-import { ID_DISPLAY_LENGTH, DEFAULT_REPORT_DAYS } from "./config";
+import { ID_LENGTH, DEFAULT_REPORT_DAYS } from "./config";
 import type { Session } from "./types";
 
 // ============================================================================
@@ -316,8 +316,8 @@ async function list(date: string): Promise<void> {
     return;
   }
 
-  const idHeader = "ID".padEnd(ID_DISPLAY_LENGTH);
-  const idSeparator = "-".repeat(ID_DISPLAY_LENGTH);
+  const idHeader = "ID".padEnd(ID_LENGTH);
+  const idSeparator = "-".repeat(ID_LENGTH);
 
   console.log(`Sessions for ${date}:\n`);
   console.log(`${idHeader} | Start | End   | Hours`);
@@ -326,7 +326,7 @@ async function list(date: string): Promise<void> {
   for (const session of filtered) {
     const endTime = session.endTime ? toTimeStr(session.endTime) : "now  ";
     const hours = (sessionDuration(session) / 60).toFixed(1).padStart(5);
-    const shortId = session.id.slice(0, ID_DISPLAY_LENGTH).padEnd(ID_DISPLAY_LENGTH);
+    const shortId = session.id.padEnd(ID_LENGTH);
     console.log(`${shortId} | ${toTimeStr(session.startTime)} | ${endTime} | ${hours}`);
   }
 

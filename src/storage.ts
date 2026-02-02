@@ -10,7 +10,7 @@
  */
 
 import { mkdir } from "fs/promises";
-import { DATA_DIR, DATA_FILE, LOG_FILE, MS_PER_MINUTE, DEFAULT_LOG_LINES } from "./config";
+import { DATA_DIR, DATA_FILE, LOG_FILE, MS_PER_MINUTE, DEFAULT_LOG_LINES, ID_LENGTH } from "./config";
 import type { Store, Session } from "./types";
 
 /** Empty store used when no data exists or data is corrupted */
@@ -113,10 +113,15 @@ export function createSession(time = new Date()): Session {
 
 /**
  * Generates a unique session ID.
- * Format: timestamp-randomstring (e.g., "1706012345678-abc1234")
+ * Format: 8 random alphanumeric characters (e.g., "a1b2c3d4")
  */
 export function generateId(): string {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+  let id = "";
+  for (let i = 0; i < ID_LENGTH; i++) {
+    id += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return id;
 }
 
 // ============================================================================

@@ -10,14 +10,14 @@
  *
  * @example
  * {
- *   id: "1706012345-abc1234",
+ *   id: "a1b2c3d4",
  *   date: "2026-01-22",
  *   startTime: "2026-01-22T09:00:00.000Z",
  *   endTime: "2026-01-22T17:30:00.000Z"
  * }
  */
 export interface Session {
-  /** Unique identifier - timestamp + random string (e.g., "1706012345-abc1234") */
+  /** Unique identifier - 8 random alphanumeric characters (e.g., "a1b2c3d4") */
   id: string;
 
   /** Date in YYYY-MM-DD format (e.g., "2026-01-22") */
