@@ -9,7 +9,7 @@
  *   work-tracker status     - Check if you're currently working
  *   work-tracker today      - See today's work summary
  *   work-tracker report     - See work report for the week
- *   work-tracker export     - Export to CSV for HR/BambooHR
+ *   work-tracker export     - Export to CSV for HR systems
  */
 
 import {

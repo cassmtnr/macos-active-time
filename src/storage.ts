@@ -9,7 +9,7 @@
  * All data is stored in ~/.work-tracker/
  */
 
-import { mkdir } from "fs/promises";
+import { mkdir, appendFile } from "fs/promises";
 import { DATA_DIR, DATA_FILE, LOG_FILE, MS_PER_MINUTE, DEFAULT_LOG_LINES, ID_LENGTH } from "./config";
 import type { Store, Session } from "./types";
 
@@ -76,7 +76,7 @@ export async function save(store: Store): Promise<void> {
 export async function appendLog(message: string): Promise<void> {
   await ensureDir();
   const line = `[${new Date().toISOString()}] ${message}\n`;
-  await Bun.write(LOG_FILE, line, { append: true });
+  await appendFile(LOG_FILE, line);
 }
 
 /**

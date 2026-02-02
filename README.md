@@ -14,7 +14,7 @@ That's it. Simple.
 - Runs silently in the background
 - Starts automatically at login
 - Manual session management (add, edit, delete)
-- CSV export for BambooHR/HR systems
+- CSV export for HR systems
 - View daily summaries and weekly reports
 
 ## Requirements
@@ -111,7 +111,7 @@ Average: 8h 3m per day
 
 ### Export to CSV
 
-Export sessions to CSV format for HR systems like BambooHR.
+Export sessions to CSV format for HR systems.
 
 ```bash
 # Print to stdout

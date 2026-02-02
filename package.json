@@ -10,6 +10,9 @@
     "start": "bun run src/daemon.ts",
     "cli": "bun run src/cli.ts",
     "build": "bun build --compile --outfile=work-tracker src/cli.ts && bun build --compile --outfile=work-tracker-daemon src/daemon.ts",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix",
+    "typecheck": "tsc --noEmit",
     "prepublishOnly": "echo 'Ready to publish'"
   },
   "keywords": [
@@ -18,7 +21,6 @@
     "macos",
     "productivity",
     "bun",
-    "bamboohr"
   ],
   "author": "",
   "license": "MIT",
@@ -33,7 +35,9 @@
   "engines": {
     "node": ">=18.0.0"
   },
-  "os": ["darwin"],
+  "os": [
+    "darwin"
+  ],
   "files": [
     "src/**/*",
     "config/**/*",
@@ -43,7 +47,11 @@
   ],
   "dependencies": {},
   "devDependencies": {
+    "@eslint/js": "^9.0.0",
     "@types/bun": "latest",
-    "typescript": "^5.0.0"
+    "eslint": "^9.0.0",
+    "eslint-plugin-unused-imports": "^4.0.0",
+    "typescript": "^5.0.0",
+    "typescript-eslint": "^8.0.0"
   }
 }
