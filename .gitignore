@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+bun.lock
+
+# Build artifacts (compiled binaries)
+work-tracker
+work-tracker-daemon
+dist/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Logs
+*.log
+logs/
+
+# Runtime data
+sessions.json
+*.pid
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# IDE/Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.settings/
+
+# TypeScript
+*.tsbuildinfo
+
+# Test coverage
+coverage/
+.nyc_output/

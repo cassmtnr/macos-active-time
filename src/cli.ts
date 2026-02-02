@@ -15,8 +15,10 @@
 import {
   load, save, readLog, createSession, generateId,
   toDateStr, toTimeStr, minutesBetween, formatDuration, parseTimeToISO,
+  isValidDate, isValidTime,
 } from "./storage";
-import type { Session, Store } from "./types";
+import { ID_DISPLAY_LENGTH, DEFAULT_REPORT_DAYS } from "./config";
+import type { Session } from "./types";
 
 // ============================================================================
 // ARGUMENT PARSING
@@ -48,7 +50,7 @@ function parseArgs(): Args {
   const args = process.argv.slice(2);
   const result: Args = {
     command: args[0] || "status",
-    days: 7,
+    days: DEFAULT_REPORT_DAYS,
     date: toDateStr(),
   };
 
@@ -58,18 +60,35 @@ function parseArgs(): Args {
     const next = args[i + 1];
 
     if ((arg === "-d" || arg === "--days") && next) {
-      result.days = parseInt(next, 10);
+      const days = parseInt(next, 10);
+      if (isNaN(days) || days < 1) {
+        console.error("Error: --days must be a positive number");
+        process.exit(1);
+      }
+      result.days = days;
       i++; // Skip next arg since we consumed it
     } else if ((arg === "-o" || arg === "--output") && next) {
       result.output = next;
       i++;
     } else if (arg === "--date" && next) {
+      if (!isValidDate(next)) {
+        console.error("Error: --date must be in YYYY-MM-DD format");
+        process.exit(1);
+      }
       result.date = next;
       i++;
     } else if (arg === "--start" && next) {
+      if (!isValidTime(next)) {
+        console.error("Error: --start must be in HH:MM format");
+        process.exit(1);
+      }
       result.start = next;
       i++;
     } else if (arg === "--end" && next) {
+      if (!isValidTime(next)) {
+        console.error("Error: --end must be in HH:MM format");
+        process.exit(1);
+      }
       result.end = next;
       i++;
     } else if (arg === "--id" && next) {
@@ -297,15 +316,17 @@ async function list(date: string): Promise<void> {
     return;
   }
 
+  const idHeader = "ID".padEnd(ID_DISPLAY_LENGTH);
+  const idSeparator = "-".repeat(ID_DISPLAY_LENGTH);
+
   console.log(`Sessions for ${date}:\n`);
-  console.log("ID                      | Start | End   | Hours");
-  console.log("------------------------|-------|-------|------");
+  console.log(`${idHeader} | Start | End   | Hours`);
+  console.log(`${idSeparator}|-------|-------|------`);
 
   for (const session of filtered) {
     const endTime = session.endTime ? toTimeStr(session.endTime) : "now  ";
     const hours = (sessionDuration(session) / 60).toFixed(1).padStart(5);
-    // Show first 22 chars of ID (enough to be unique)
-    const shortId = session.id.slice(0, 22).padEnd(22);
+    const shortId = session.id.slice(0, ID_DISPLAY_LENGTH).padEnd(ID_DISPLAY_LENGTH);
     console.log(`${shortId} | ${toTimeStr(session.startTime)} | ${endTime} | ${hours}`);
   }
 
@@ -445,4 +466,7 @@ async function main(): Promise<void> {
 }
 
 // Run the CLI
-main().catch(console.error);
+main().catch((err: Error) => {
+  console.error(`Error: ${err.message}`);
+  process.exit(1);
+});

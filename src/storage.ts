@@ -10,7 +10,7 @@
  */
 
 import { mkdir } from "fs/promises";
-import { DATA_DIR, DATA_FILE, LOG_FILE, MS_PER_MINUTE } from "./config";
+import { DATA_DIR, DATA_FILE, LOG_FILE, MS_PER_MINUTE, DEFAULT_LOG_LINES } from "./config";
 import type { Store, Session } from "./types";
 
 /** Empty store used when no data exists or data is corrupted */
@@ -82,10 +82,10 @@ export async function appendLog(message: string): Promise<void> {
 /**
  * Reads the last N lines from the event log.
  *
- * @param lines - Number of lines to return (default: 20)
+ * @param lines - Number of lines to return (default: DEFAULT_LOG_LINES)
  * @returns Array of log lines, or empty array if log doesn't exist
  */
-export async function readLog(lines = 20): Promise<string[]> {
+export async function readLog(lines = DEFAULT_LOG_LINES): Promise<string[]> {
   const file = Bun.file(LOG_FILE);
   if (!(await file.exists())) return [];
   const content = await file.text();
@@ -169,16 +169,53 @@ export function formatDuration(mins: number): string {
 }
 
 /**
+ * Validates a time string in HH:MM format.
+ *
+ * @param time - Time string to validate
+ * @returns true if valid, false otherwise
+ */
+export function isValidTime(time: string): boolean {
+  const match = time.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return false;
+  const hours = parseInt(match[1], 10);
+  const minutes = parseInt(match[2], 10);
+  return hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59;
+}
+
+/**
+ * Validates a date string in YYYY-MM-DD format.
+ *
+ * @param date - Date string to validate
+ * @returns true if valid, false otherwise
+ */
+export function isValidDate(date: string): boolean {
+  const match = date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return false;
+  const [, year, month, day] = match.map(Number);
+  const d = new Date(year, month - 1, day);
+  return d.getFullYear() === year && d.getMonth() === month - 1 && d.getDate() === day;
+}
+
+/**
  * Parses a date + time string into an ISO timestamp.
  * Used for manual session entry (e.g., "2026-01-22" + "09:00").
+ * Times are interpreted as local time.
  *
  * @param date - Date in YYYY-MM-DD format
  * @param time - Time in HH:MM format
  * @returns ISO timestamp string
+ * @throws Error if date or time format is invalid
  */
 export function parseTimeToISO(date: string, time: string): string {
+  if (!isValidDate(date)) {
+    throw new Error(`Invalid date format: ${date} (expected YYYY-MM-DD)`);
+  }
+  if (!isValidTime(time)) {
+    throw new Error(`Invalid time format: ${time} (expected HH:MM)`);
+  }
+
   const [hours, minutes] = time.split(":").map(Number);
-  const d = new Date(`${date}T00:00:00`);
-  d.setHours(hours, minutes, 0, 0);
+  const [year, month, day] = date.split("-").map(Number);
+  const d = new Date(year, month - 1, day, hours, minutes, 0, 0);
   return d.toISOString();
 }

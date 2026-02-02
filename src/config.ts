@@ -22,3 +22,12 @@ export const POLL_INTERVAL_MS = 5000;
 
 /** Milliseconds in one minute - used for time calculations */
 export const MS_PER_MINUTE = 60000;
+
+/** Number of characters to display for session IDs in list view */
+export const ID_DISPLAY_LENGTH = 22;
+
+/** Default number of log lines to show */
+export const DEFAULT_LOG_LINES = 20;
+
+/** Default number of days for reports */
+export const DEFAULT_REPORT_DAYS = 7;

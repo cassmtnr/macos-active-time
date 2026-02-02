@@ -2,46 +2,67 @@
  * macOS Event Detection - monitors screen lock/unlock state.
  *
  * HOW IT WORKS:
- * 1. Uses Python + PyObjC (Quartz framework) to check if screen is locked
+ * 1. Uses Swift + Quartz framework to check if screen is locked
  * 2. Polls every 5 seconds to detect changes
  * 3. Yields events when lock state changes
  *
- * WHY PYTHON?
+ * WHY SWIFT?
  * macOS doesn't expose screen lock state through simple shell commands.
- * Python's Quartz bindings (pre-installed on macOS) provide easy access
- * to CGSessionCopyCurrentDictionary which contains the lock state.
+ * Swift is pre-installed on macOS and provides direct access to
+ * CGSessionCopyCurrentDictionary which contains the lock state.
  */
 
 import { POLL_INTERVAL_MS } from "./config";
 import type { Event } from "./types";
 
 /**
- * Python script that checks if the screen is locked.
+ * Swift code that checks if the screen is locked.
  * Returns "1" if locked, "0" if unlocked.
  *
  * CGSessionCopyCurrentDictionary returns a dictionary with session info.
  * The "CGSSessionScreenIsLocked" key tells us if the screen is locked.
  */
-const PYTHON_CHECK_LOCK = `
+const SWIFT_CHECK_LOCK = `
 import Quartz
-s = Quartz.CGSessionCopyCurrentDictionary()
-print(1 if s and s.get("CGSSessionScreenIsLocked", 0) else 0)
+if let d = CGSessionCopyCurrentDictionary() as? [String: Any],
+   let locked = d["CGSSessionScreenIsLocked"] as? Int, locked == 1 {
+    print("1")
+} else {
+    print("0")
+}
 `;
+
+/** Track if we've already logged a Swift error to avoid spam */
+let swiftErrorLogged = false;
 
 /**
  * Checks if the macOS screen is currently locked.
  *
- * Spawns a Python process to query the Quartz framework.
+ * Spawns a Swift process to query the Quartz framework.
  * Returns false on any error (fail-safe).
  */
 async function isLocked(): Promise<boolean> {
   try {
-    const proc = Bun.spawn(["python3", "-c", PYTHON_CHECK_LOCK], { stdout: "pipe" });
+    const proc = Bun.spawn(["swift", "-e", SWIFT_CHECK_LOCK], { stdout: "pipe", stderr: "pipe" });
     const output = await new Response(proc.stdout).text();
-    await proc.exited;
+    const exitCode = await proc.exited;
+
+    if (exitCode !== 0) {
+      if (!swiftErrorLogged) {
+        const stderr = await new Response(proc.stderr).text();
+        console.error(`Warning: Swift lock detection failed (exit ${exitCode}): ${stderr.trim()}`);
+        swiftErrorLogged = true;
+      }
+      return false;
+    }
+
+    swiftErrorLogged = false; // Reset on success
     return output.trim() === "1";
-  } catch {
-    // If Python fails, assume not locked (fail-safe)
+  } catch (err) {
+    if (!swiftErrorLogged) {
+      console.error(`Warning: Swift lock detection error: ${err}`);
+      swiftErrorLogged = true;
+    }
     return false;
   }
 }

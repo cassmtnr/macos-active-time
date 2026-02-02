@@ -47,12 +47,42 @@ bun build --compile --outfile="$INSTALL_DIR/work-tracker-daemon" src/daemon.ts
 echo -e "${GREEN}✓${NC} Built executables"
 
 # Create symlink in /usr/local/bin for easy access
+SYMLINK_CREATED=false
 if [ -d "/usr/local/bin" ]; then
     echo "Creating symlink in /usr/local/bin..."
-    ln -sf "$INSTALL_DIR/work-tracker" /usr/local/bin/work-tracker 2>/dev/null || {
-        echo -e "${YELLOW}Note: Could not create symlink in /usr/local/bin (may need sudo)${NC}"
-        echo "You can manually run: sudo ln -sf $INSTALL_DIR/work-tracker /usr/local/bin/work-tracker"
-    }
+    if ln -sf "$INSTALL_DIR/work-tracker" /usr/local/bin/work-tracker 2>/dev/null; then
+        SYMLINK_CREATED=true
+        echo -e "${GREEN}✓${NC} Symlink created"
+    fi
+fi
+
+# If symlink failed, add to PATH in shell profile
+if [ "$SYMLINK_CREATED" = false ]; then
+    echo "Adding ~/.work-tracker to PATH..."
+
+    # Determine shell profile
+    SHELL_PROFILE=""
+    if [ -n "$ZSH_VERSION" ] || [ "$SHELL" = "/bin/zsh" ]; then
+        SHELL_PROFILE="$HOME/.zshrc"
+    elif [ -n "$BASH_VERSION" ] || [ "$SHELL" = "/bin/bash" ]; then
+        SHELL_PROFILE="$HOME/.bashrc"
+    fi
+
+    if [ -n "$SHELL_PROFILE" ] && [ -f "$SHELL_PROFILE" ]; then
+        # Check if already in profile
+        if ! grep -q 'export PATH="$HOME/.work-tracker:$PATH"' "$SHELL_PROFILE" 2>/dev/null; then
+            echo '' >> "$SHELL_PROFILE"
+            echo '# Work Tracker' >> "$SHELL_PROFILE"
+            echo 'export PATH="$HOME/.work-tracker:$PATH"' >> "$SHELL_PROFILE"
+            echo -e "${GREEN}✓${NC} Added to PATH in $SHELL_PROFILE"
+            echo -e "${YELLOW}Note: Run 'source $SHELL_PROFILE' or restart your terminal for the PATH change to take effect${NC}"
+        else
+            echo -e "${GREEN}✓${NC} PATH already configured in $SHELL_PROFILE"
+        fi
+    else
+        echo -e "${YELLOW}Note: Could not determine shell profile${NC}"
+        echo "Add this to your shell profile: export PATH=\"\$HOME/.work-tracker:\$PATH\""
+    fi
 fi
 
 # Install LaunchAgent
@@ -85,4 +115,12 @@ echo "  work-tracker export    - Export to CSV"
 echo ""
 echo "Data location: $DATA_DIR"
 echo "Logs: $DATA_DIR/daemon.log"
+
+if [ "$SYMLINK_CREATED" = false ]; then
+    echo ""
+    echo -e "${YELLOW}Important: Restart your terminal or run:${NC}"
+    echo "  source ~/.zshrc"
+    echo ""
+    echo "Then 'work-tracker' will be available."
+fi
 echo ""
