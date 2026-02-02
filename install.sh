@@ -12,14 +12,35 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# Check for Bun
+# Check for Bun and install if needed
 if ! command -v bun &> /dev/null; then
-    echo -e "${RED}Error: Bun is not installed.${NC}"
-    echo "Install Bun first: curl -fsSL https://bun.sh/install | bash"
-    exit 1
-fi
+    echo -e "${YELLOW}Bun not found. Installing...${NC}"
+    curl -fsSL https://bun.sh/install | bash
 
-echo -e "${GREEN}✓${NC} Bun found: $(bun --version)"
+    # Source the shell profile to make bun available
+    if [ -f "$HOME/.bashrc" ]; then
+        source "$HOME/.bashrc"
+    fi
+    if [ -f "$HOME/.zshrc" ]; then
+        source "$HOME/.zshrc" 2>/dev/null || true
+    fi
+    # Also check the default bun location
+    if [ -f "$HOME/.bun/bin/bun" ]; then
+        export BUN_INSTALL="$HOME/.bun"
+        export PATH="$BUN_INSTALL/bin:$PATH"
+    fi
+
+    # Verify installation
+    if ! command -v bun &> /dev/null; then
+        echo -e "${RED}Error: Bun installation failed.${NC}"
+        echo "Please install manually: curl -fsSL https://bun.sh/install | bash"
+        echo "Then restart your terminal and run this script again."
+        exit 1
+    fi
+    echo -e "${GREEN}✓${NC} Bun installed: $(bun --version)"
+else
+    echo -e "${GREEN}✓${NC} Bun found: $(bun --version)"
+fi
 
 # Directories
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

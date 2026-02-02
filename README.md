@@ -20,19 +20,18 @@ That's it. Simple.
 ## Requirements
 
 - macOS 12+
-- [Bun](https://bun.sh/)
+- [Bun](https://bun.sh/) (automatically installed if not present)
 
 ## Installation
 
 ```bash
-# Install Bun (if not already installed)
-curl -fsSL https://bun.sh/install | bash
-
 # Clone and install
 git clone https://github.com/cassmtnr/working-time.git
 cd working-time
 ./install.sh
 ```
+
+The installer will automatically install Bun if it's not already installed.
 
 After installation, restart your terminal or run:
 ```bash
