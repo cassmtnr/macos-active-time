@@ -6,7 +6,31 @@
  */
 
 import { homedir } from "os";
-import { join } from "path";
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
+
+// Fallback version for compiled binary
+const FALLBACK_VERSION = "0.0.1";
+
+// Read version from package.json (may fail in compiled binary)
+let version = FALLBACK_VERSION;
+try {
+  const __dirname = dirname(fileURLToPath(import.meta.url));
+  // Skip if running in Bun's virtual filesystem (compiled binary)
+  if (!__dirname.startsWith("/$bunfs")) {
+    const packageJsonPath = join(__dirname, "..", "package.json");
+    const packageJson = await Bun.file(packageJsonPath).json();
+    version = packageJson.version;
+  }
+} catch {
+  // Use fallback version if package.json can't be read
+}
+
+/** Application version from package.json */
+export const VERSION: string = version;
+
+/** Application name */
+export const APP_NAME = "work-tracker";
 
 /** Directory where all work tracker data is stored (~/.work-tracker) */
 export const DATA_DIR = join(homedir(), ".work-tracker");
@@ -29,5 +53,3 @@ export const ID_LENGTH = 8;
 /** Default number of log lines to show */
 export const DEFAULT_LOG_LINES = 20;
 
-/** Default number of days for reports */
-export const DEFAULT_REPORT_DAYS = 7;

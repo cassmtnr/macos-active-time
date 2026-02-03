@@ -15,7 +15,7 @@
  * The daemon is typically started automatically via LaunchAgent at login.
  */
 
-import { load, save, createSession, appendLog, toDateStr } from "./storage";
+import { load, save, createSession, appendLog, toDateStr, minutesBetween } from "./storage";
 import { watchEvents } from "./macos-events";
 import { DATA_DIR } from "./config";
 import type { Store, Event } from "./types";
@@ -28,10 +28,10 @@ import type { Store, Event } from "./types";
  *
  * @param event - The event that occurred
  * @param store - Current state
+ * @param now - Current time (optional, defaults to new Date() for testing)
  * @returns New state after processing the event
  */
-function processEvent(event: Event, store: Store): Store {
-  const now = new Date();
+export function processEvent(event: Event, store: Store, now = new Date()): Store {
   const today = toDateStr(now);
 
   // Create a copy of the store (don't mutate the original)
@@ -54,7 +54,10 @@ function processEvent(event: Event, store: Store): Store {
       midnight.setHours(0, 0, 0, 0);
 
       updated.currentSession.endTime = midnight.toISOString();
-      updated.sessions.push(updated.currentSession);
+      // Only save if session has non-zero duration
+      if (minutesBetween(updated.currentSession.startTime, updated.currentSession.endTime) > 0) {
+        updated.sessions.push(updated.currentSession);
+      }
       updated.currentSession = createSession(now);
       console.log(`[${now.toISOString()}] New day - new session`);
     }
@@ -66,9 +69,12 @@ function processEvent(event: Event, store: Store): Store {
     if (updated.currentSession) {
       // End the current session
       updated.currentSession.endTime = now.toISOString();
-      updated.sessions.push(updated.currentSession);
+      // Only save if session has non-zero duration
+      if (minutesBetween(updated.currentSession.startTime, updated.currentSession.endTime) > 0) {
+        updated.sessions.push(updated.currentSession);
+        console.log(`[${now.toISOString()}] Work ended`);
+      }
       updated.currentSession = null;
-      console.log(`[${now.toISOString()}] Work ended`);
     }
     // If no active session, do nothing (already not working)
   }
@@ -92,7 +98,10 @@ async function shutdown(currentSessionId: string | null): Promise<void> {
   // Only end the current session if it matches what we're tracking
   if (store.currentSession && store.currentSession.id === currentSessionId) {
     store.currentSession.endTime = new Date().toISOString();
-    store.sessions.push(store.currentSession);
+    // Only save if session has non-zero duration
+    if (minutesBetween(store.currentSession.startTime, store.currentSession.endTime) > 0) {
+      store.sessions.push(store.currentSession);
+    }
     store.currentSession = null;
     await save(store);
   }

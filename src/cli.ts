@@ -17,7 +17,7 @@ import {
   toDateStr, toTimeStr, minutesBetween, formatDuration, parseTimeToISO,
   isValidDate, isValidTime,
 } from "./storage";
-import { DEFAULT_REPORT_DAYS } from "./config";
+import { VERSION, APP_NAME } from "./config";
 import type { Session } from "./types";
 
 // ============================================================================
@@ -25,9 +25,8 @@ import type { Session } from "./types";
 // ============================================================================
 
 /** Parsed command-line arguments */
-interface Args {
+export interface Args {
   command: string;
-  days: number;
   output?: string;
   date: string;
   start?: string;
@@ -39,7 +38,6 @@ interface Args {
  * Parses command-line arguments into a structured object.
  *
  * Supports:
- *   -d, --days N        Number of days for reports
  *   -o, --output FILE   Output file for export
  *   --date YYYY-MM-DD   Date for add/list/edit
  *   --start HH:MM       Start time
@@ -50,7 +48,6 @@ function parseArgs(): Args {
   const args = process.argv.slice(2);
   const result: Args = {
     command: args[0] || "status",
-    days: DEFAULT_REPORT_DAYS,
     date: toDateStr(),
   };
 
@@ -59,15 +56,7 @@ function parseArgs(): Args {
     const arg = args[i];
     const next = args[i + 1];
 
-    if ((arg === "-d" || arg === "--days") && next) {
-      const days = parseInt(next, 10);
-      if (isNaN(days) || days < 1) {
-        console.error("Error: --days must be a positive number");
-        process.exit(1);
-      }
-      result.days = days;
-      i++; // Skip next arg since we consumed it
-    } else if ((arg === "-o" || arg === "--output") && next) {
+    if ((arg === "-o" || arg === "--output") && next) {
       result.output = next;
       i++;
     } else if (arg === "--date" && next) {
@@ -116,7 +105,7 @@ function fail(msg: string): never {
 /**
  * Calculates the duration of a session in minutes.
  */
-function sessionDuration(session: Session): number {
+export function sessionDuration(session: Session): number {
   return minutesBetween(session.startTime, session.endTime);
 }
 
@@ -124,7 +113,7 @@ function sessionDuration(session: Session): number {
  * Groups sessions by their date.
  * Returns a Map where keys are dates (YYYY-MM-DD) and values are arrays of sessions.
  */
-function groupByDate(sessions: Session[]): Map<string, Session[]> {
+export function groupByDate(sessions: Session[]): Map<string, Session[]> {
   const map = new Map<string, Session[]>();
   for (const session of sessions) {
     const list = map.get(session.date) || [];
@@ -173,8 +162,8 @@ async function today(): Promise<void> {
   }
 }
 
-/** Shows work report for the last N days */
-async function report(days: number): Promise<void> {
+/** Shows work report for all recorded sessions */
+async function report(): Promise<void> {
   const store = await load();
 
   // Combine all sessions
@@ -184,14 +173,14 @@ async function report(days: number): Promise<void> {
   ];
 
   const grouped = groupByDate(allSessions);
-  const dates = [...grouped.keys()].sort().reverse().slice(0, days);
+  const dates = [...grouped.keys()].sort().reverse();
 
   if (dates.length === 0) {
     console.log("No work records found");
     return;
   }
 
-  console.log(`Work Report (last ${days} days)\n`);
+  console.log("Work Report\n");
   console.log("Date        | Start | End   | Hours");
   console.log("------------|-------|-------|------");
 
@@ -213,23 +202,24 @@ async function report(days: number): Promise<void> {
   console.log(`Average: ${formatDuration(Math.round(totalMinutes / dates.length))} per day`);
 }
 
-/** Exports sessions to CSV format */
-async function exportCsv(days: number, output?: string): Promise<void> {
+/** Exports all sessions to CSV format */
+async function exportCsv(output?: string): Promise<void> {
   const store = await load();
 
+  // Combine completed sessions with current session (if any)
+  const allSessions = [
+    ...store.sessions,
+    ...(store.currentSession ? [store.currentSession] : []),
+  ];
+
   // Sort sessions by start time
-  const sorted = [...store.sessions].sort((a, b) =>
+  const sorted = allSessions.sort((a, b) =>
     a.startTime.localeCompare(b.startTime)
   );
 
-  // Filter to last N days
-  const cutoffDate = new Date();
-  cutoffDate.setDate(cutoffDate.getDate() - days);
-  const filtered = sorted.filter(s => new Date(s.startTime) >= cutoffDate);
-
   // Build CSV
   const lines = ["Date,Start Time,End Time,Total Hours"];
-  for (const session of filtered) {
+  for (const session of sorted) {
     const hours = (sessionDuration(session) / 60).toFixed(2);
     const endTime = session.endTime ? toTimeStr(session.endTime) : "ongoing";
     lines.push(`${session.date},${toTimeStr(session.startTime)},${endTime},${hours}`);
@@ -267,13 +257,15 @@ async function stop(): Promise<void> {
   }
 
   store.currentSession.endTime = new Date().toISOString();
-  const duration = formatDuration(sessionDuration(store.currentSession));
+  const duration = sessionDuration(store.currentSession);
 
-  store.sessions.push(store.currentSession);
+  // Only save if session has non-zero duration
+  if (duration > 0) {
+    store.sessions.push(store.currentSession);
+    console.log(`Stopped. Duration: ${formatDuration(duration)}`);
+  }
   store.currentSession = null;
   await save(store);
-
-  console.log(`Stopped. Duration: ${duration}`);
 }
 
 /** Adds a past work session manually */
@@ -360,8 +352,14 @@ async function edit(
 
   const store = await load();
 
-  // Find session by ID prefix (user doesn't need to type full ID)
-  const session = store.sessions.find(s => s.id.startsWith(id));
+  // Find session by ID prefix - check both completed sessions and current session
+  let session: Session | undefined = store.sessions.find(s => s.id.startsWith(id));
+  const isCurrentSession = !session && store.currentSession?.id.startsWith(id);
+
+  if (isCurrentSession && store.currentSession) {
+    session = store.currentSession;
+  }
+
   if (!session) {
     fail(`Session not found: ${id}`);
   }
@@ -372,8 +370,10 @@ async function edit(
   if (startTime) session.startTime = parseTimeToISO(targetDate, startTime);
   if (endTime) session.endTime = parseTimeToISO(targetDate, endTime);
 
-  // Re-sort sessions by start time
-  store.sessions.sort((a, b) => a.startTime.localeCompare(b.startTime));
+  // Re-sort sessions by start time (only if editing a completed session)
+  if (!isCurrentSession) {
+    store.sessions.sort((a, b) => a.startTime.localeCompare(b.startTime));
+  }
   await save(store);
 
   const endStr = session.endTime ? toTimeStr(session.endTime) : "ongoing";
@@ -388,16 +388,26 @@ async function del(id?: string): Promise<void> {
 
   const store = await load();
 
-  // Find session by ID prefix
+  // Find session by ID prefix - check both completed sessions and current session
   const index = store.sessions.findIndex(s => s.id.startsWith(id));
-  if (index === -1) {
-    fail(`Session not found: ${id}`);
+
+  if (index !== -1) {
+    const [deleted] = store.sessions.splice(index, 1);
+    await save(store);
+    console.log(`Deleted: ${deleted.date} ${toTimeStr(deleted.startTime)}`);
+    return;
   }
 
-  const [deleted] = store.sessions.splice(index, 1);
-  await save(store);
+  // Check if it's the current session
+  if (store.currentSession?.id.startsWith(id)) {
+    const deleted = store.currentSession;
+    store.currentSession = null;
+    await save(store);
+    console.log(`Deleted current session: ${deleted.date} ${toTimeStr(deleted.startTime)}`);
+    return;
+  }
 
-  console.log(`Deleted: ${deleted.date} ${toTimeStr(deleted.startTime)}`);
+  fail(`Session not found: ${id}`);
 }
 
 /** Shows recent event log entries */
@@ -418,13 +428,13 @@ async function log(): Promise<void> {
 // ============================================================================
 
 const HELP = `
-work-tracker - Automatic work time tracker for macOS
+${APP_NAME} v${VERSION} - Automatic work time tracker for macOS
 
 Commands:
   status              Current session status
   today               Today's summary
-  report [-d N]       Report for last N days (default: 7)
-  export [-d N] [-o]  Export CSV
+  report              Work report
+  export [-o FILE]    Export CSV
   start / stop        Manual session control
   add --date --start --end    Add past session
   list --date         List sessions for date
@@ -432,9 +442,9 @@ Commands:
   delete --id         Delete session
   log                 Show event log
   daemon              Start background daemon
+  version             Show version
 
 Options:
-  -d, --days N        Number of days
   -o, --output FILE   Output file
   --date YYYY-MM-DD   Target date
   --start HH:MM       Start time
@@ -456,8 +466,8 @@ async function main(): Promise<void> {
     start,
     stop,
     log,
-    report: () => report(args.days),
-    export: () => exportCsv(args.days, args.output),
+    report,
+    export: () => exportCsv(args.output),
     add: () => add(args.date, args.start, args.end),
     list: () => list(args.date),
     edit: () => edit(args.id, args.date, args.start, args.end),
@@ -466,6 +476,9 @@ async function main(): Promise<void> {
     help: async () => console.log(HELP),
     "-h": async () => console.log(HELP),
     "--help": async () => console.log(HELP),
+    version: async () => console.log(`${APP_NAME} v${VERSION}`),
+    "-v": async () => console.log(`${APP_NAME} v${VERSION}`),
+    "--version": async () => console.log(`${APP_NAME} v${VERSION}`),
   };
 
   const handler = commands[args.command];

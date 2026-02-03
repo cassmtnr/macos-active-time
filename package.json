@@ -1,6 +1,6 @@
 {
   "name": "macos-work-tracker",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "Automatic work time tracker for macOS - tracks screen lock/unlock events",
   "type": "module",
   "bin": {
@@ -10,10 +10,12 @@
     "start": "bun run src/daemon.ts",
     "cli": "bun run src/cli.ts",
     "build": "bun build --compile --outfile=work-tracker src/cli.ts && bun build --compile --outfile=work-tracker-daemon src/daemon.ts",
+    "test": "bun test",
+    "test:watch": "bun test --watch",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "echo 'Ready to publish'"
+    "prepublishOnly": "bun run lint && bun run typecheck && bun test"
   },
   "keywords": [
     "work-tracker",
