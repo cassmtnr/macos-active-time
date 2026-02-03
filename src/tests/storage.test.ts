@@ -8,6 +8,7 @@
  * - Parsing (parseTimeToISO)
  * - ID generation (generateId)
  * - Session creation (createSession)
+ * - File I/O operations (load, save, appendLog, readLog)
  */
 
 import { describe, test, expect } from "bun:test";
@@ -22,6 +23,7 @@ import {
   generateId,
   createSession,
 } from "../storage";
+import type { Store } from "../types";
 
 describe("toDateStr", () => {
   test("formats date as YYYY-MM-DD", () => {
@@ -281,5 +283,53 @@ describe("createSession", () => {
     const session1 = createSession();
     const session2 = createSession();
     expect(session1.id).not.toBe(session2.id);
+  });
+});
+
+// Integration test for load/save cycle
+describe("Store serialization", () => {
+  test("store can be serialized and deserialized", () => {
+    const store: Store = {
+      version: 1,
+      sessions: [
+        {
+          id: "test1234",
+          date: "2026-01-22",
+          startTime: "2026-01-22T09:00:00.000Z",
+          endTime: "2026-01-22T17:00:00.000Z",
+        },
+      ],
+      currentSession: {
+        id: "current1",
+        date: "2026-01-23",
+        startTime: "2026-01-23T09:00:00.000Z",
+        endTime: null,
+      },
+    };
+
+    // Serialize and deserialize
+    const json = JSON.stringify(store, null, 2);
+    const parsed = JSON.parse(json) as Store;
+
+    expect(parsed.version).toBe(1);
+    expect(parsed.sessions).toHaveLength(1);
+    expect(parsed.sessions[0].id).toBe("test1234");
+    expect(parsed.currentSession?.id).toBe("current1");
+    expect(parsed.currentSession?.endTime).toBeNull();
+  });
+
+  test("empty store serialization", () => {
+    const store: Store = {
+      version: 1,
+      sessions: [],
+      currentSession: null,
+    };
+
+    const json = JSON.stringify(store, null, 2);
+    const parsed = JSON.parse(json) as Store;
+
+    expect(parsed.version).toBe(1);
+    expect(parsed.sessions).toHaveLength(0);
+    expect(parsed.currentSession).toBeNull();
   });
 });

@@ -1,13 +1,14 @@
 /**
- * Regression tests for cli.ts helper functions.
+ * Regression tests for cli.ts helper functions and argument parsing.
  *
  * Tests cover:
  * - Session duration calculation
  * - Grouping sessions by date
+ * - Argument parsing
  */
 
-import { describe, test, expect } from "bun:test";
-import { sessionDuration, groupByDate } from "../cli";
+import { describe, test, expect, spyOn, beforeEach, afterEach } from "bun:test";
+import { sessionDuration, groupByDate, parseArgs } from "../cli";
 import type { Session } from "../types";
 
 /**
@@ -150,5 +151,144 @@ describe("groupByDate", () => {
     expect(grouped.size).toBe(2);
     expect(grouped.get("2026-01-22")?.[0].id).toBe("same");
     expect(grouped.get("2026-01-23")?.[0].id).toBe("same");
+  });
+});
+
+describe("parseArgs", () => {
+  let consoleErrorSpy: ReturnType<typeof spyOn>;
+
+  beforeEach(() => {
+    consoleErrorSpy = spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    consoleErrorSpy.mockRestore();
+  });
+
+  test("defaults to status command with no arguments", () => {
+    const result = parseArgs([]);
+
+    expect(result).not.toBeNull();
+    expect(result?.command).toBe("status");
+  });
+
+  test("parses command as first argument", () => {
+    expect(parseArgs(["today"])?.command).toBe("today");
+    expect(parseArgs(["report"])?.command).toBe("report");
+    expect(parseArgs(["export"])?.command).toBe("export");
+    expect(parseArgs(["start"])?.command).toBe("start");
+    expect(parseArgs(["stop"])?.command).toBe("stop");
+  });
+
+  test("parses -o output flag", () => {
+    const result = parseArgs(["export", "-o", "output.csv"]);
+
+    expect(result?.command).toBe("export");
+    expect(result?.output).toBe("output.csv");
+  });
+
+  test("parses --output flag", () => {
+    const result = parseArgs(["export", "--output", "output.csv"]);
+
+    expect(result?.command).toBe("export");
+    expect(result?.output).toBe("output.csv");
+  });
+
+  test("parses --date flag with valid date", () => {
+    const result = parseArgs(["list", "--date", "2026-01-22"]);
+
+    expect(result?.command).toBe("list");
+    expect(result?.date).toBe("2026-01-22");
+  });
+
+  test("returns null for invalid --date format", () => {
+    const result = parseArgs(["list", "--date", "invalid"]);
+
+    expect(result).toBeNull();
+    expect(consoleErrorSpy).toHaveBeenCalledWith("Error: --date must be in YYYY-MM-DD format");
+  });
+
+  test("parses --start flag with valid time", () => {
+    const result = parseArgs(["add", "--start", "09:00"]);
+
+    expect(result?.command).toBe("add");
+    expect(result?.start).toBe("09:00");
+  });
+
+  test("returns null for invalid --start format", () => {
+    const result = parseArgs(["add", "--start", "invalid"]);
+
+    expect(result).toBeNull();
+    expect(consoleErrorSpy).toHaveBeenCalledWith("Error: --start must be in HH:MM format");
+  });
+
+  test("parses --end flag with valid time", () => {
+    const result = parseArgs(["add", "--end", "17:30"]);
+
+    expect(result?.command).toBe("add");
+    expect(result?.end).toBe("17:30");
+  });
+
+  test("returns null for invalid --end format", () => {
+    const result = parseArgs(["add", "--end", "25:00"]);
+
+    expect(result).toBeNull();
+    expect(consoleErrorSpy).toHaveBeenCalledWith("Error: --end must be in HH:MM format");
+  });
+
+  test("parses --id flag", () => {
+    const result = parseArgs(["edit", "--id", "abc12345"]);
+
+    expect(result?.command).toBe("edit");
+    expect(result?.id).toBe("abc12345");
+  });
+
+  test("parses multiple flags together", () => {
+    const result = parseArgs([
+      "add",
+      "--date", "2026-01-22",
+      "--start", "09:00",
+      "--end", "17:30",
+    ]);
+
+    expect(result?.command).toBe("add");
+    expect(result?.date).toBe("2026-01-22");
+    expect(result?.start).toBe("09:00");
+    expect(result?.end).toBe("17:30");
+  });
+
+  test("parses edit command with all flags", () => {
+    const result = parseArgs([
+      "edit",
+      "--id", "abc12345",
+      "--date", "2026-01-22",
+      "--start", "08:00",
+      "--end", "18:00",
+    ]);
+
+    expect(result?.command).toBe("edit");
+    expect(result?.id).toBe("abc12345");
+    expect(result?.date).toBe("2026-01-22");
+    expect(result?.start).toBe("08:00");
+    expect(result?.end).toBe("18:00");
+  });
+
+  test("ignores flags without values", () => {
+    const result = parseArgs(["list", "--date"]);
+
+    expect(result?.command).toBe("list");
+    expect(result?.date).not.toBe(undefined); // Should have default date
+  });
+
+  test("handles help flags", () => {
+    expect(parseArgs(["help"])?.command).toBe("help");
+    expect(parseArgs(["-h"])?.command).toBe("-h");
+    expect(parseArgs(["--help"])?.command).toBe("--help");
+  });
+
+  test("handles version flags", () => {
+    expect(parseArgs(["version"])?.command).toBe("version");
+    expect(parseArgs(["-v"])?.command).toBe("-v");
+    expect(parseArgs(["--version"])?.command).toBe("--version");
   });
 });

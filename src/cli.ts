@@ -36,6 +36,7 @@ export interface Args {
 
 /**
  * Parses command-line arguments into a structured object.
+ * Returns null if validation fails (invalid date/time format).
  *
  * Supports:
  *   -o, --output FILE   Output file for export
@@ -43,9 +44,12 @@ export interface Args {
  *   --start HH:MM       Start time
  *   --end HH:MM         End time
  *   --id ID             Session ID for edit/delete
+ *
+ * @param argv - Arguments to parse (defaults to process.argv.slice(2))
+ * @returns Parsed arguments or null if validation fails
  */
-function parseArgs(): Args {
-  const args = process.argv.slice(2);
+export function parseArgs(argv?: string[]): Args | null {
+  const args = argv ?? process.argv.slice(2);
   const result: Args = {
     command: args[0] || "status",
     date: toDateStr(),
@@ -62,21 +66,21 @@ function parseArgs(): Args {
     } else if (arg === "--date" && next) {
       if (!isValidDate(next)) {
         console.error("Error: --date must be in YYYY-MM-DD format");
-        process.exit(1);
+        return null;
       }
       result.date = next;
       i++;
     } else if (arg === "--start" && next) {
       if (!isValidTime(next)) {
         console.error("Error: --start must be in HH:MM format");
-        process.exit(1);
+        return null;
       }
       result.start = next;
       i++;
     } else if (arg === "--end" && next) {
       if (!isValidTime(next)) {
         console.error("Error: --end must be in HH:MM format");
-        process.exit(1);
+        return null;
       }
       result.end = next;
       i++;
@@ -215,13 +219,13 @@ async function report(): Promise<void> {
       }
     }
 
-    console.log("└──────────┴───────┼───────┼───────┤");
-    console.log(`                   │ Total │ ${dayHours.padStart(5)} │`);
-    console.log("                   └───────┴───────┘\n");
+    console.log("└──────────┴───────┼───────────────┤");
+    console.log(`                   │ Total Day: ${dayHours.padStart(4)} │`);
+    console.log("                   └───────────────┘\n");
   }
 
   console.log("─────────────────────────────────────");
-  console.log(`Total: ${formatDuration(totalMinutes)} over ${dates.length} days`);
+  console.log(`Total Month: ${formatDuration(totalMinutes)} over ${dates.length} days`);
   console.log(`Average: ${formatDuration(Math.round(totalMinutes / dates.length))} per day`);
 }
 
@@ -235,18 +239,41 @@ async function exportCsv(output?: string): Promise<void> {
     ...(store.currentSession ? [store.currentSession] : []),
   ];
 
-  // Sort sessions by start time
-  const sorted = allSessions.sort((a, b) =>
-    a.startTime.localeCompare(b.startTime)
-  );
+  const grouped = groupByDate(allSessions);
+  const dates = [...grouped.keys()].sort(); // Oldest to newest
 
-  // Build CSV
-  const lines = ["Date,Start Time,End Time,Total Hours"];
-  for (const session of sorted) {
-    const hours = (sessionDuration(session) / 60).toFixed(2);
-    const endTime = session.endTime ? toTimeStr(session.endTime) : "ongoing";
-    lines.push(`${session.date},${toTimeStr(session.startTime)},${endTime},${hours}`);
+  if (dates.length === 0) {
+    console.log("No sessions to export");
+    return;
   }
+
+  // Build CSV grouped by date with daily totals
+  const lines = ["Date,Start Time,End Time,Hours"];
+  let totalMinutes = 0;
+
+  for (const date of dates) {
+    const sessions = grouped.get(date);
+    if (!sessions) continue;
+
+    let dayMinutes = 0;
+
+    for (const session of sessions) {
+      const hours = (sessionDuration(session) / 60).toFixed(2);
+      const endTime = session.endTime ? toTimeStr(session.endTime) : "ongoing";
+      lines.push(`${session.date},${toTimeStr(session.startTime)},${endTime},${hours}`);
+      dayMinutes += sessionDuration(session);
+    }
+
+    // Daily total row
+    const dayHours = (dayMinutes / 60).toFixed(2);
+    lines.push(`${date},Total Day,,${dayHours}`);
+    lines.push(""); // Empty line between days
+    totalMinutes += dayMinutes;
+  }
+
+  // Overall total
+  const totalHours = (totalMinutes / 60).toFixed(2);
+  lines.push(`Total Month,,,${totalHours}`);
 
   const csv = lines.join("\n");
 
@@ -355,9 +382,9 @@ async function list(date: string): Promise<void> {
     }
   }
 
-  console.log("└──────────┴───────┼───────┼───────┤");
-  console.log(`                   │ Total │ ${totalHours.padStart(5)} │`);
-  console.log("                   └───────┴───────┘");
+  console.log("└──────────┴───────┼───────────────┤");
+  console.log(`                   │ Total Day: ${totalHours.padStart(4)} │`);
+  console.log("                   └───────────────┘");
 
   console.log("\nUse --id with edit/delete commands");
 }
@@ -481,6 +508,10 @@ Options:
 
 async function main(): Promise<void> {
   const args = parseArgs();
+
+  if (!args) {
+    process.exit(1);
+  }
 
   // Map of command names to their handler functions
   const commands: Record<string, () => Promise<void>> = {
