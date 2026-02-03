@@ -422,17 +422,6 @@ bun test --watch
 bun test --coverage
 ```
 
-### Test Coverage
-
-Run `bun test --coverage` to see detailed coverage report.
-
-The test suite includes:
-- **120+ unit tests** covering utilities, validation, and state machine logic
-- **Integration tests** that run the actual CLI commands
-- **~70% line coverage** overall
-
-Note: CLI command handlers have lower unit test coverage because they perform file I/O. These are tested through integration tests that run the CLI as a subprocess.
-
 ### Linting and Type Checking
 
 ```bash
