@@ -173,7 +173,7 @@ async function report(): Promise<void> {
   ];
 
   const grouped = groupByDate(allSessions);
-  const dates = [...grouped.keys()].sort().reverse();
+  const dates = [...grouped.keys()].sort();
 
   if (dates.length === 0) {
     console.log("No work records found");
@@ -181,23 +181,46 @@ async function report(): Promise<void> {
   }
 
   console.log("Work Report\n");
-  console.log("Date        | Start | End   | Hours");
-  console.log("------------|-------|-------|------");
 
   let totalMinutes = 0;
 
   for (const date of dates) {
     const sessions = grouped.get(date);
     if (!sessions) continue;
-    for (const session of sessions) {
-      const endTime = session.endTime ? toTimeStr(session.endTime) : "now  ";
+
+    // Calculate daily total
+    const dayMinutes = sessions.reduce((sum, s) => sum + sessionDuration(s), 0);
+    totalMinutes += dayMinutes;
+    const dayHours = (dayMinutes / 60).toFixed(1);
+
+    // Table drawing for this date
+    const top    = "┌──────────┬───────┬───────┬───────┐";
+    const header = "│    ID    │ Start │  End  │ Hours │";
+    const sep    = "├──────────┼───────┼───────┼───────┤";
+
+    console.log(`${date}:\n`);
+    console.log(top);
+    console.log(header);
+    console.log(sep);
+
+    for (let i = 0; i < sessions.length; i++) {
+      const session = sessions[i];
+      const id = session.id.padStart(8);
+      const start = toTimeStr(session.startTime);
+      const end = session.endTime ? toTimeStr(session.endTime) : "now  ";
       const hours = (sessionDuration(session) / 60).toFixed(1).padStart(5);
-      console.log(`${session.date} | ${toTimeStr(session.startTime)} | ${endTime} | ${hours}`);
-      totalMinutes += sessionDuration(session);
+      console.log(`│ ${id} │ ${start} │ ${end} │ ${hours} │`);
+      if (i < sessions.length - 1) {
+        console.log(sep);
+      }
     }
+
+    console.log("└──────────┴───────┼───────┼───────┤");
+    console.log(`                   │ Total │ ${dayHours.padStart(5)} │`);
+    console.log("                   └───────┴───────┘\n");
   }
 
-  console.log("------------|-------|-------|------");
+  console.log("─────────────────────────────────────");
   console.log(`Total: ${formatDuration(totalMinutes)} over ${dates.length} days`);
   console.log(`Average: ${formatDuration(Math.round(totalMinutes / dates.length))} per day`);
 }
