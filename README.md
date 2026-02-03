@@ -42,7 +42,7 @@ source ~/.zshrc
 
 ### Status
 
-Check if you're currently working and for how long.
+Check if you're currently working and view today's sessions.
 
 ```bash
 work-tracker status
@@ -50,16 +50,24 @@ work-tracker status
 
 **Output:**
 ```
-Status: Working
-Started: 09:15
-Duration: 4h 32m
+Sessions for 2026-01-22:
+
+┌──────────┬───────┬───────┬───────┐
+│    ID    │ Start │  End  │ Hours │
+├──────────┼───────┼───────┼───────┤
+│ a1b2c3d4 │ 09:15 │ 12:30 │   3.3 │
+├──────────┼───────┼───────┼───────┤
+│ e5f6g7h8 │ 13:15 │ now   │   4.0 │
+└──────────┴───────┼───────┼───────┤
+                   │ Total │   7.3 │
+                   └───────┴───────┘
+
+Use --id with edit/delete commands
 ```
 
-Or when not working:
+Or when no sessions:
 ```
-Status: Not working
-
-No active session.
+No sessions for 2026-01-22
 ```
 
 ### Today's Summary
@@ -80,48 +88,56 @@ Sessions:
   13:15 - ongoing: 4h 0m
 ```
 
-### Weekly Report
+### Work Report
 
-View work report for the last N days (default: 7).
+View work report for all recorded sessions.
 
 ```bash
-# Last 7 days (default)
 work-tracker report
-
-# Last 14 days
-work-tracker report -d 14
-
-# Last 30 days
-work-tracker report --days 30
 ```
 
 **Output:**
 ```
-Work Report (last 7 days)
+Work Report
 
-Date        | Start | End   | Hours
-------------|-------|-------|------
-2026-01-22  | 09:15 | 12:30 |   3.3
-2026-01-22  | 13:15 | now   |   4.0
-2026-01-21  | 08:45 | 17:30 |   8.8
-------------|-------|-------|------
+2026-01-21:
+
+┌──────────┬───────┬───────┬───────┐
+│    ID    │ Start │  End  │ Hours │
+├──────────┼───────┼───────┼───────┤
+│ x9y8z7w6 │ 08:45 │ 17:30 │   8.8 │
+└──────────┴───────┼───────┼───────┤
+                   │ Total │   8.8 │
+                   └───────┴───────┘
+
+2026-01-22:
+
+┌──────────┬───────┬───────┬───────┐
+│    ID    │ Start │  End  │ Hours │
+├──────────┼───────┼───────┼───────┤
+│ a1b2c3d4 │ 09:15 │ 12:30 │   3.3 │
+├──────────┼───────┼───────┼───────┤
+│ e5f6g7h8 │ 13:15 │ now   │   4.0 │
+└──────────┴───────┼───────┼───────┤
+                   │ Total │   7.3 │
+                   └───────┴───────┘
+
+─────────────────────────────────────
 Total: 16h 6m over 2 days
 Average: 8h 3m per day
 ```
 
 ### Export to CSV
 
-Export sessions to CSV format for HR systems.
+Export all sessions to CSV format for HR systems.
 
 ```bash
 # Print to stdout
 work-tracker export
 
-# Last 30 days to file
-work-tracker export -d 30 -o hours.csv
-
-# Last 7 days to file
-work-tracker export --days 7 --output weekly-hours.csv
+# Save to file
+work-tracker export -o hours.csv
+work-tracker export --output weekly-hours.csv
 ```
 
 **Output:**
@@ -185,10 +201,15 @@ work-tracker list --date 2026-01-22
 ```
 Sessions for 2026-01-22:
 
-ID       | Start | End   | Hours
----------|-------|-------|------
-a1b2c3d4 | 09:15 | 12:30 |   3.3
-e5f6g7h8 | 13:15 | 17:45 |   4.5
+┌──────────┬───────┬───────┬───────┐
+│    ID    │ Start │  End  │ Hours │
+├──────────┼───────┼───────┼───────┤
+│ a1b2c3d4 │ 09:15 │ 12:30 │   3.3 │
+├──────────┼───────┼───────┼───────┤
+│ e5f6g7h8 │ 13:15 │ 17:45 │   4.5 │
+└──────────┴───────┼───────┼───────┤
+                   │ Total │   7.8 │
+                   └───────┴───────┘
 
 Use --id with edit/delete commands
 ```
@@ -262,10 +283,10 @@ work-tracker --help
 
 | Command | Description |
 |---------|-------------|
-| `status` | Current session status |
+| `status` | Current session status (same as list for today) |
 | `today` | Today's work summary |
-| `report` | Report for last N days |
-| `export` | Export to CSV |
+| `report` | Work report for all sessions |
+| `export` | Export all sessions to CSV |
 | `start` | Manually start a session |
 | `stop` | Manually stop current session |
 | `add` | Add a past session |
@@ -279,7 +300,6 @@ work-tracker --help
 
 | Option | Description | Example |
 |--------|-------------|---------|
-| `-d, --days N` | Number of days for report/export | `-d 30` |
 | `-o, --output FILE` | Output file for export | `-o hours.csv` |
 | `--date YYYY-MM-DD` | Target date for add/list/edit | `--date 2026-01-22` |
 | `--start HH:MM` | Start time | `--start 09:00` |
