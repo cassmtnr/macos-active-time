@@ -305,9 +305,9 @@ async function report(): Promise<void> {
       }
     }
 
-    console.log("└──────────┼───────┴───────┴───────┤");
-    console.log(`           │${(`Total Day: ${dayHours.padStart(4)}`).padStart(22)} │`);
-    console.log("           └───────────────────────┘\n");
+    console.log("├──────────┴───────┴───────┴───────┤");
+    console.log(`│${(`Total Day: ${dayHours.padStart(4)} `).padStart(34)}│`);
+    console.log("└──────────────────────────────────┘\n");
   }
 
   console.log("─────────────────────────────────────");
@@ -533,9 +533,9 @@ async function list(date: string): Promise<void> {
     }
   }
 
-  console.log("└──────────┼───────┴───────┴───────┤");
-  console.log(`           │${(`Total Day: ${totalHours.padStart(4)}`).padStart(22)} │`);
-  console.log("           └───────────────────────┘");
+  console.log("├──────────┴───────┴───────┴───────┤");
+  console.log(`│${(`Total Day: ${totalHours.padStart(4)} `).padStart(34)}│`);
+  console.log("└──────────────────────────────────┘");
 
   console.log("\nUse --id with edit/delete commands");
 }
