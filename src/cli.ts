@@ -157,6 +157,27 @@ export function groupAbsencesByDate(absences: Absence[]): Map<string, Absence[]>
 }
 
 /**
+ * Checks whether a new absence can be added, and how.
+ * Returns "blocked" if the date is already full, "upgrade" if an existing
+ * half-day should be promoted to full, or "add" if a new entry is needed.
+ */
+export function resolveAbsenceAdd(
+  existing: Absence[],
+  duration: AbsenceDuration,
+): "blocked" | "upgrade" | "add" {
+  const existingMinutes = existing.reduce((sum, a) => sum + ABSENCE_MINUTES[a.duration], 0);
+
+  if (existingMinutes >= ABSENCE_MINUTES.full) return "blocked";
+
+  // Existing half + new half or full → upgrade to full
+  if (existing.length === 1 && existing[0].duration === "half") {
+    return "upgrade";
+  }
+
+  return "add";
+}
+
+/**
  * Formats an absence type for display in the table (5 chars).
  */
 function absenceTypeLabel(type: AbsenceType): string {
@@ -400,6 +421,20 @@ async function add(date: string, startTime?: string, endTime?: string, sick?: bo
   if (absenceType) {
     const store = await load();
     const duration: AbsenceDuration = half ? "half" : "full";
+    const existing = store.absences.filter(a => a.date === date && a.type === absenceType);
+    const action = resolveAbsenceAdd(existing, duration);
+
+    if (action === "blocked") {
+      console.log(`Already have a full day ${absenceType} on ${date}`);
+      return;
+    }
+
+    if (action === "upgrade") {
+      existing[0].duration = "full";
+      await save(store);
+      console.log(`Upgraded ${absenceType} on ${date} to full day: 8.0h`);
+      return;
+    }
 
     const absence: Absence = {
       id: generateId(),
