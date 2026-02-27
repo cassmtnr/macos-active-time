@@ -118,9 +118,6 @@ async function main(): Promise<void> {
   console.log("Work Tracker Daemon starting...");
   console.log(`Data: ${DATA_DIR}`);
 
-  // Fire-and-forget update check (never blocks startup)
-  checkForUpdate();
-
   // Load existing data
   let store = await load();
 
@@ -137,6 +134,9 @@ async function main(): Promise<void> {
   for await (const event of watchEvents()) {
     // Log the event for debugging
     await appendLog(event);
+
+    // Check for updates once per day on unlock
+    if (event === "unlock") checkForUpdate();
 
     // Reload from disk to pick up any CLI edits (e.g., added absences, manual sessions)
     store = await load();
