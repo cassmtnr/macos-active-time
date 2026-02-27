@@ -59,13 +59,13 @@ jobs:
       - name: Bump version
         id: version
         run: |
-          npm version ${{ steps.bump.outputs.type }} -m "chore: release %s"
-          echo "tag=v$(node -p 'require(\"./package.json\").version')" >> "$GITHUB_OUTPUT"
+          NEW_VERSION=$(npm version ${{ steps.bump.outputs.type }} -m "chore: release %s")
+          echo "tag=$NEW_VERSION" >> "$GITHUB_OUTPUT"
           git push
           git push --tags
 
       - name: Create GitHub Release
-        run: gh release create "${{ steps.version.outputs.tag }}" --generate-notes
+        run: gh release create "${{ steps.version.outputs.tag }}" --generate-notes --latest
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
