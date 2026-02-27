@@ -1,6 +1,6 @@
 {
   "name": "macos-work-tracker",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "Automatic work time tracker for macOS - tracks screen lock/unlock events",
   "type": "module",
   "bin": {
