@@ -15,6 +15,7 @@
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
     "typecheck": "tsc --noEmit",
+    "postinstall": "command -v bun >/dev/null 2>&1 || echo '\\n⚠  macos-work-tracker requires Bun (https://bun.sh) — install it with: curl -fsSL https://bun.sh/install | bash\\n'",
     "prepublishOnly": "bun run lint && bun run typecheck && bun test"
   },
   "keywords": [
