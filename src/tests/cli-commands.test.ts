@@ -511,33 +511,23 @@ describe("Absence functionality", () => {
   describe("resolveAbsenceAdd (duplicate prevention)", () => {
     test("allows adding to empty list", async () => {
       const { resolveAbsenceAdd } = await import("../cli");
-      expect(resolveAbsenceAdd([], "full")).toBe("add");
-      expect(resolveAbsenceAdd([], "half")).toBe("add");
+      expect(resolveAbsenceAdd([])).toBe("add");
     });
 
-    test("blocks duplicate full day", async () => {
+    test("blocks when full day already exists", async () => {
       const { resolveAbsenceAdd } = await import("../cli");
       const existing: Absence[] = [
         { id: "a1", date: "2026-02-09", type: "sick", duration: "full" },
       ];
-      expect(resolveAbsenceAdd(existing, "full")).toBe("blocked");
-      expect(resolveAbsenceAdd(existing, "half")).toBe("blocked");
+      expect(resolveAbsenceAdd(existing)).toBe("blocked");
     });
 
-    test("upgrades half to full when adding another half", async () => {
+    test("upgrades when half day already exists", async () => {
       const { resolveAbsenceAdd } = await import("../cli");
       const existing: Absence[] = [
         { id: "a1", date: "2026-02-09", type: "vacation", duration: "half" },
       ];
-      expect(resolveAbsenceAdd(existing, "half")).toBe("upgrade");
-    });
-
-    test("upgrades half to full when adding a full day", async () => {
-      const { resolveAbsenceAdd } = await import("../cli");
-      const existing: Absence[] = [
-        { id: "a1", date: "2026-02-09", type: "sick", duration: "half" },
-      ];
-      expect(resolveAbsenceAdd(existing, "full")).toBe("upgrade");
+      expect(resolveAbsenceAdd(existing)).toBe("upgrade");
     });
   });
 });

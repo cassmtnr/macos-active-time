@@ -163,7 +163,6 @@ export function groupAbsencesByDate(absences: Absence[]): Map<string, Absence[]>
  */
 export function resolveAbsenceAdd(
   existing: Absence[],
-  duration: AbsenceDuration,
 ): "blocked" | "upgrade" | "add" {
   const existingMinutes = existing.reduce((sum, a) => sum + ABSENCE_MINUTES[a.duration], 0);
 
@@ -422,7 +421,7 @@ async function add(date: string, startTime?: string, endTime?: string, sick?: bo
     const store = await load();
     const duration: AbsenceDuration = half ? "half" : "full";
     const existing = store.absences.filter(a => a.date === date && a.type === absenceType);
-    const action = resolveAbsenceAdd(existing, duration);
+    const action = resolveAbsenceAdd(existing);
 
     if (action === "blocked") {
       console.log(`Already have a full day ${absenceType} on ${date}`);
