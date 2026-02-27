@@ -39,6 +39,7 @@ cd working-time
 The installer will automatically install Bun if it's not already installed.
 
 After installation, restart your terminal or run:
+
 ```bash
 source ~/.zshrc
 ```
@@ -54,6 +55,7 @@ work-tracker status
 ```
 
 **Output:**
+
 ```
 Sessions for 2026-01-22:
 
@@ -71,6 +73,7 @@ Use --id with edit/delete commands
 ```
 
 Or when no sessions:
+
 ```
 No sessions for 2026-01-22
 ```
@@ -84,6 +87,7 @@ work-tracker today
 ```
 
 **Output:**
+
 ```
 Date: 2026-01-22
 Total: 7h 15m (7.25 hours)
@@ -102,6 +106,7 @@ work-tracker report
 ```
 
 **Output:**
+
 ```
 Work Report
 
@@ -146,6 +151,7 @@ work-tracker export --output weekly-hours.csv
 ```
 
 **Output:**
+
 ```csv
 Date,Start Time,End Time,Hours
 2026-01-21,08:45,17:30,8.75
@@ -171,9 +177,11 @@ work-tracker stop
 ```
 
 **Output:**
+
 ```
 Started at 09:15
 ```
+
 ```
 Stopped. Duration: 3h 45m
 ```
@@ -191,6 +199,7 @@ work-tracker add --date 2026-01-20 --start 08:30 --end 17:00
 ```
 
 **Output:**
+
 ```
 Added: 2026-01-22 09:00 - 12:30 (3h 30m)
 ```
@@ -208,6 +217,7 @@ work-tracker list --date 2026-01-22
 ```
 
 **Output:**
+
 ```
 Sessions for 2026-01-22:
 
@@ -243,6 +253,7 @@ work-tracker edit --id a1b2c3d4 --date 2026-01-21 --start 09:00 --end 17:00
 ```
 
 **Output:**
+
 ```
 Updated: 2026-01-22 09:00 - 18:00
 ```
@@ -257,6 +268,7 @@ work-tracker delete --id a1b2c3d4
 ```
 
 **Output:**
+
 ```
 Deleted: 2026-01-22 09:15
 ```
@@ -270,6 +282,7 @@ work-tracker log
 ```
 
 **Output:**
+
 ```
 Recent events:
 
@@ -291,40 +304,40 @@ work-tracker --help
 
 ## Command Reference
 
-| Command | Description |
-|---------|-------------|
+| Command  | Description                                     |
+| -------- | ----------------------------------------------- |
 | `status` | Current session status (same as list for today) |
-| `today` | Today's work summary |
-| `report` | Work report for all sessions |
-| `export` | Export all sessions to CSV |
-| `start` | Manually start a session |
-| `stop` | Manually stop current session |
-| `add` | Add a past session |
-| `list` | List sessions for a date |
-| `edit` | Edit an existing session |
-| `delete` | Delete a session |
-| `log` | Show event log |
-| `help` | Show help |
+| `today`  | Today's work summary                            |
+| `report` | Work report for all sessions                    |
+| `export` | Export all sessions to CSV                      |
+| `start`  | Manually start a session                        |
+| `stop`   | Manually stop current session                   |
+| `add`    | Add a past session                              |
+| `list`   | List sessions for a date                        |
+| `edit`   | Edit an existing session                        |
+| `delete` | Delete a session                                |
+| `log`    | Show event log                                  |
+| `help`   | Show help                                       |
 
 ## Options Reference
 
-| Option | Description | Example |
-|--------|-------------|---------|
-| `-o, --output FILE` | Output file for export | `-o hours.csv` |
+| Option              | Description                   | Example             |
+| ------------------- | ----------------------------- | ------------------- |
+| `-o, --output FILE` | Output file for export        | `-o hours.csv`      |
 | `--date YYYY-MM-DD` | Target date for add/list/edit | `--date 2026-01-22` |
-| `--start HH:MM` | Start time | `--start 09:00` |
-| `--end HH:MM` | End time | `--end 17:30` |
-| `--id ID` | Session ID for edit/delete | `--id a1b2c3d4` |
+| `--start HH:MM`     | Start time                    | `--start 09:00`     |
+| `--end HH:MM`       | End time                      | `--end 17:30`       |
+| `--id ID`           | Session ID for edit/delete    | `--id a1b2c3d4`     |
 
 ## Data Storage
 
 All data is stored in `~/.work-tracker/`:
 
-| File | Description |
-|------|-------------|
-| `sessions.json` | All work session data |
-| `events.log` | Lock/unlock event history |
-| `daemon.log` | Daemon process logs |
+| File            | Description               |
+| --------------- | ------------------------- |
+| `sessions.json` | All work session data     |
+| `events.log`    | Lock/unlock event history |
+| `daemon.log`    | Daemon process logs       |
 
 ## Daemon Management
 
@@ -349,6 +362,7 @@ cat ~/.work-tracker/daemon.log
 ```
 
 This will:
+
 - Stop the daemon
 - Remove the LaunchAgent
 - Remove `~/.work-tracker` directory
@@ -443,9 +457,10 @@ bun run build
 ```
 
 This creates two compiled executables:
+
 - `work-tracker` - CLI binary
 - `work-tracker-daemon` - Daemon binary
 
 ## License
 
-MIT
+MIT License
