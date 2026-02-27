@@ -20,6 +20,7 @@ function emptyStore(): Store {
     version: 1,
     sessions: [],
     currentSession: null,
+    absences: [],
   };
 }
 
@@ -36,6 +37,7 @@ function storeWithSession(date: string, startTime: string, id = "test1234"): Sto
       startTime,
       endTime: null,
     },
+    absences: [],
   };
 }
 
@@ -266,6 +268,7 @@ describe("processEvent - complex scenarios", () => {
         },
       ],
       currentSession: null,
+      absences: [],
     };
 
     // Start new session
