@@ -2,29 +2,16 @@ name: Publish to npm (Manual)
 
 on:
   workflow_dispatch:
-    inputs:
-      version:
-        description: 'Version bump type (patch, minor, major) or specific version'
-        required: true
-        default: 'patch'
-        type: choice
-        options:
-          - patch
-          - minor
-          - major
 
 jobs:
   publish:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
       id-token: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -39,18 +26,6 @@ jobs:
 
       - name: Install dependencies
         run: bun install
-
-      - name: Configure git
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-      - name: Bump version (manual trigger)
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          npm version ${{ inputs.version }} -m "chore: bump version to %s"
-          git push
-          git push --tags
 
       - name: Publish to npm
         run: npm publish --provenance --access public
