@@ -6,11 +6,11 @@
  */
 
 import { describe, test, expect, spyOn, beforeEach, afterEach } from "bun:test";
-import type { Store, Session } from "../types";
+import type { Store, Session, Absence } from "../types";
 
 // Mock store data
 const mockStore: Store = {
-  version: 1,
+  version: 2,
   sessions: [
     {
       id: "session1",
@@ -32,16 +32,18 @@ const mockStore: Store = {
     },
   ],
   currentSession: null,
+  absences: [],
 };
 
 const emptyStore: Store = {
-  version: 1,
+  version: 2,
   sessions: [],
   currentSession: null,
+  absences: [],
 };
 
 const storeWithCurrentSession: Store = {
-  version: 1,
+  version: 2,
   sessions: [],
   currentSession: {
     id: "current1",
@@ -49,6 +51,7 @@ const storeWithCurrentSession: Store = {
     startTime: "2026-01-22T14:00:00.000Z",
     endTime: null,
   },
+  absences: [],
 };
 
 describe("CLI command logic", () => {
@@ -301,9 +304,9 @@ describe("Table formatting", () => {
     const top = "┌──────────┬───────┬───────┬───────┐";
     const header = "│    ID    │ Start │  End  │ Hours │";
     const sep = "├──────────┼───────┼───────┼───────┤";
-    const bottom = "└──────────┴───────┼───────────────┤";
-    const totalRow = "                   │ Total Day:  X.X │";
-    const totalBottom = "                   └───────────────┘";
+    const bottom = "└──────────┼───────┴───────┴───────┤";
+    const totalRow = "           │       Total Day:  X.X │";
+    const totalBottom = "           └───────────────────────┘";
 
     expect(top).toContain("┌");
     expect(top).toContain("┐");
@@ -328,5 +331,180 @@ describe("Table formatting", () => {
     const padded = hours.padStart(5);
     expect(padded).toBe("  7.5");
     expect(padded.length).toBe(5);
+  });
+});
+
+describe("Absence functionality", () => {
+  describe("absenceDuration", () => {
+    test("returns 480 minutes for full day", async () => {
+      const { absenceDuration } = await import("../cli");
+
+      const absence: Absence = {
+        id: "abs1",
+        date: "2026-02-09",
+        type: "sick",
+        duration: "full",
+      };
+
+      expect(absenceDuration(absence)).toBe(480);
+    });
+
+    test("returns 240 minutes for half day", async () => {
+      const { absenceDuration } = await import("../cli");
+
+      const absence: Absence = {
+        id: "abs2",
+        date: "2026-02-09",
+        type: "vacation",
+        duration: "half",
+      };
+
+      expect(absenceDuration(absence)).toBe(240);
+    });
+  });
+
+  describe("groupAbsencesByDate", () => {
+    test("groups absences by date correctly", async () => {
+      const { groupAbsencesByDate } = await import("../cli");
+
+      const absences: Absence[] = [
+        { id: "a1", date: "2026-02-09", type: "sick", duration: "full" },
+        { id: "a2", date: "2026-02-09", type: "vacation", duration: "half" },
+        { id: "a3", date: "2026-02-10", type: "sick", duration: "half" },
+      ];
+
+      const grouped = groupAbsencesByDate(absences);
+
+      expect(grouped.size).toBe(2);
+      expect(grouped.get("2026-02-09")?.length).toBe(2);
+      expect(grouped.get("2026-02-10")?.length).toBe(1);
+    });
+
+    test("returns empty map for no absences", async () => {
+      const { groupAbsencesByDate } = await import("../cli");
+
+      const grouped = groupAbsencesByDate([]);
+      expect(grouped.size).toBe(0);
+    });
+  });
+
+  describe("parseArgs with absence flags", () => {
+    test("parses --sick flag", async () => {
+      const { parseArgs } = await import("../cli");
+
+      const result = parseArgs(["add", "--sick"]);
+      expect(result).not.toBeNull();
+      expect(result?.command).toBe("add");
+      expect(result?.sick).toBe(true);
+      expect(result?.vacation).toBeUndefined();
+      expect(result?.half).toBeUndefined();
+    });
+
+    test("parses --vacation flag", async () => {
+      const { parseArgs } = await import("../cli");
+
+      const result = parseArgs(["add", "--vacation"]);
+      expect(result).not.toBeNull();
+      expect(result?.command).toBe("add");
+      expect(result?.vacation).toBe(true);
+    });
+
+    test("parses --half flag", async () => {
+      const { parseArgs } = await import("../cli");
+
+      const result = parseArgs(["add", "--sick", "--half"]);
+      expect(result).not.toBeNull();
+      expect(result?.sick).toBe(true);
+      expect(result?.half).toBe(true);
+    });
+
+    test("parses --vacation with --date and --half", async () => {
+      const { parseArgs } = await import("../cli");
+
+      const result = parseArgs(["add", "--vacation", "--date", "2026-02-10", "--half"]);
+      expect(result).not.toBeNull();
+      expect(result?.vacation).toBe(true);
+      expect(result?.half).toBe(true);
+      expect(result?.date).toBe("2026-02-10");
+    });
+  });
+
+  describe("absence in daily totals", () => {
+    test("absences contribute to total minutes", async () => {
+      const { absenceDuration, sessionDuration } = await import("../cli");
+
+      const sessions: Session[] = [
+        {
+          id: "s1",
+          date: "2026-02-09",
+          startTime: "2026-02-09T09:00:00.000Z",
+          endTime: "2026-02-09T13:00:00.000Z",
+        },
+      ];
+
+      const absences: Absence[] = [
+        { id: "a1", date: "2026-02-09", type: "vacation", duration: "half" },
+      ];
+
+      const sessionMins = sessions.reduce((sum, s) => sum + sessionDuration(s), 0);
+      const absenceMins = absences.reduce((sum, a) => sum + absenceDuration(a), 0);
+      const totalMinutes = sessionMins + absenceMins;
+
+      // 4h work + 4h half-day vacation = 8h = 480 minutes
+      expect(sessionMins).toBe(240);
+      expect(absenceMins).toBe(240);
+      expect(totalMinutes).toBe(480);
+    });
+
+    test("full day sick leave equals 8 hours", async () => {
+      const { absenceDuration } = await import("../cli");
+
+      const absence: Absence = {
+        id: "a1",
+        date: "2026-02-09",
+        type: "sick",
+        duration: "full",
+      };
+
+      expect(absenceDuration(absence) / 60).toBe(8);
+    });
+  });
+
+  describe("store with absences", () => {
+    test("store can hold both sessions and absences", () => {
+      const store: Store = {
+        version: 2,
+        sessions: mockStore.sessions,
+        currentSession: null,
+        absences: [
+          { id: "abs1", date: "2026-01-23", type: "sick", duration: "full" },
+          { id: "abs2", date: "2026-01-24", type: "vacation", duration: "half" },
+        ],
+      };
+
+      expect(store.sessions.length).toBe(3);
+      expect(store.absences.length).toBe(2);
+      expect(store.absences[0].type).toBe("sick");
+      expect(store.absences[1].duration).toBe("half");
+    });
+
+    test("v1 store migration adds absences array", () => {
+      // Simulate a v1 store loaded from disk (no absences field)
+      const v1Store = {
+        version: 1,
+        sessions: [],
+        currentSession: null,
+      };
+
+      // Migration logic
+      const migrated: Store = {
+        ...v1Store,
+        version: 2,
+        absences: (v1Store as Record<string, unknown>).absences as Absence[] ?? [],
+      };
+
+      expect(migrated.version).toBe(2);
+      expect(migrated.absences).toEqual([]);
+    });
   });
 });

@@ -53,3 +53,6 @@ export const ID_LENGTH = 8;
 /** Default number of log lines to show */
 export const DEFAULT_LOG_LINES = 20;
 
+/** Minutes for absence durations */
+export const ABSENCE_MINUTES = { full: 480, half: 240 } as const;
+
