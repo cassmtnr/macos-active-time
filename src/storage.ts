@@ -14,7 +14,7 @@ import { DATA_DIR, DATA_FILE, LOG_FILE, MS_PER_MINUTE, DEFAULT_LOG_LINES, ID_LEN
 import type { Store, Session } from "./types";
 
 /** Empty store used when no data exists or data is corrupted */
-const EMPTY_STORE: Store = { version: 1, sessions: [], currentSession: null };
+const EMPTY_STORE: Store = { version: 2, sessions: [], currentSession: null, absences: [] };
 
 /**
  * Creates the data directory if it doesn't exist.
@@ -48,7 +48,14 @@ export async function load(): Promise<Store> {
 
   // Try to parse existing file
   try {
-    return await file.json();
+    const store: Store = await file.json();
+    // Migrate v1 → v2: add absences array
+    if (store.version < 2) {
+      store.version = 2;
+      store.absences = store.absences ?? [];
+      await save(store);
+    }
+    return store;
   } catch {
     // File is corrupted - backup and start fresh
     await Bun.write(`${DATA_FILE}.backup.${Date.now()}`, await file.text());

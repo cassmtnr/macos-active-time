@@ -17,8 +17,8 @@ import {
   toDateStr, toTimeStr, minutesBetween, formatDuration, parseTimeToISO,
   isValidDate, isValidTime,
 } from "./storage";
-import { VERSION, APP_NAME } from "./config";
-import type { Session } from "./types";
+import { VERSION, APP_NAME, ABSENCE_MINUTES } from "./config";
+import type { Session, Absence, AbsenceType, AbsenceDuration } from "./types";
 
 // ============================================================================
 // ARGUMENT PARSING
@@ -32,6 +32,9 @@ export interface Args {
   start?: string;
   end?: string;
   id?: string;
+  sick?: boolean;
+  vacation?: boolean;
+  half?: boolean;
 }
 
 /**
@@ -87,6 +90,12 @@ export function parseArgs(argv?: string[]): Args | null {
     } else if (arg === "--id" && next) {
       result.id = next;
       i++;
+    } else if (arg === "--sick") {
+      result.sick = true;
+    } else if (arg === "--vacation") {
+      result.vacation = true;
+    } else if (arg === "--half") {
+      result.half = true;
     }
   }
 
@@ -127,6 +136,54 @@ export function groupByDate(sessions: Session[]): Map<string, Session[]> {
   return map;
 }
 
+/**
+ * Returns the duration of an absence in minutes.
+ */
+export function absenceDuration(absence: Absence): number {
+  return ABSENCE_MINUTES[absence.duration];
+}
+
+/**
+ * Groups absences by their date.
+ */
+export function groupAbsencesByDate(absences: Absence[]): Map<string, Absence[]> {
+  const map = new Map<string, Absence[]>();
+  for (const absence of absences) {
+    const list = map.get(absence.date) || [];
+    list.push(absence);
+    map.set(absence.date, list);
+  }
+  return map;
+}
+
+/**
+ * Checks whether a new absence can be added, and how.
+ * Returns "blocked" if the date is already full, "upgrade" if an existing
+ * half-day should be promoted to full, or "add" if a new entry is needed.
+ */
+export function resolveAbsenceAdd(
+  existing: Absence[],
+  duration: AbsenceDuration,
+): "blocked" | "upgrade" | "add" {
+  const existingMinutes = existing.reduce((sum, a) => sum + ABSENCE_MINUTES[a.duration], 0);
+
+  if (existingMinutes >= ABSENCE_MINUTES.full) return "blocked";
+
+  // Existing half + new half or full → upgrade to full
+  if (existing.length === 1 && existing[0].duration === "half") {
+    return "upgrade";
+  }
+
+  return "add";
+}
+
+/**
+ * Formats an absence type for display in the table (5 chars).
+ */
+function absenceTypeLabel(type: AbsenceType): string {
+  return type === "sick" ? " sick" : "vactn";
+}
+
 // ============================================================================
 // COMMANDS
 // ============================================================================
@@ -147,13 +204,16 @@ async function today(): Promise<void> {
     ...(store.currentSession ? [store.currentSession] : []),
   ];
   const todaySessions = allSessions.filter(s => s.date === date);
+  const todayAbsences = store.absences.filter(a => a.date === date);
 
-  if (todaySessions.length === 0) {
+  if (todaySessions.length === 0 && todayAbsences.length === 0) {
     console.log("No work recorded today");
     return;
   }
 
-  const totalMinutes = todaySessions.reduce((sum, s) => sum + sessionDuration(s), 0);
+  const sessionMinutes = todaySessions.reduce((sum, s) => sum + sessionDuration(s), 0);
+  const absenceMinutes = todayAbsences.reduce((sum, a) => sum + absenceDuration(a), 0);
+  const totalMinutes = sessionMinutes + absenceMinutes;
 
   console.log(`Date: ${date}`);
   console.log(`Total: ${formatDuration(totalMinutes)} (${(totalMinutes / 60).toFixed(2)} hours)\n`);
@@ -163,6 +223,11 @@ async function today(): Promise<void> {
     const endTime = session.endTime ? toTimeStr(session.endTime) : "ongoing";
     const duration = formatDuration(sessionDuration(session));
     console.log(`  ${toTimeStr(session.startTime)} - ${endTime}: ${duration}`);
+  }
+
+  for (const absence of todayAbsences) {
+    const hours = (absenceDuration(absence) / 60).toFixed(1);
+    console.log(`  ${absence.type} (${absence.duration} day): ${hours}h`);
   }
 }
 
@@ -177,7 +242,11 @@ async function report(): Promise<void> {
   ];
 
   const grouped = groupByDate(allSessions);
-  const dates = [...grouped.keys()].sort();
+  const groupedAbsences = groupAbsencesByDate(store.absences);
+
+  // Collect all dates from both sessions and absences
+  const dateSet = new Set([...grouped.keys(), ...groupedAbsences.keys()]);
+  const dates = [...dateSet].sort();
 
   if (dates.length === 0) {
     console.log("No work records found");
@@ -189,13 +258,17 @@ async function report(): Promise<void> {
   let totalMinutes = 0;
 
   for (const date of dates) {
-    const sessions = grouped.get(date);
-    if (!sessions) continue;
+    const sessions = grouped.get(date) || [];
+    const absences = groupedAbsences.get(date) || [];
 
     // Calculate daily total
-    const dayMinutes = sessions.reduce((sum, s) => sum + sessionDuration(s), 0);
+    const sessionMins = sessions.reduce((sum, s) => sum + sessionDuration(s), 0);
+    const absenceMins = absences.reduce((sum, a) => sum + absenceDuration(a), 0);
+    const dayMinutes = sessionMins + absenceMins;
     totalMinutes += dayMinutes;
     const dayHours = (dayMinutes / 60).toFixed(1);
+
+    const rowCount = sessions.length + absences.length;
 
     // Table drawing for this date
     const top    = "┌──────────┬───────┬───────┬───────┐";
@@ -207,21 +280,35 @@ async function report(): Promise<void> {
     console.log(header);
     console.log(sep);
 
-    for (let i = 0; i < sessions.length; i++) {
-      const session = sessions[i];
+    let rowIndex = 0;
+
+    for (const session of sessions) {
       const id = session.id.padStart(8);
       const start = toTimeStr(session.startTime);
       const end = session.endTime ? toTimeStr(session.endTime) : "now  ";
       const hours = (sessionDuration(session) / 60).toFixed(1).padStart(5);
       console.log(`│ ${id} │ ${start} │ ${end} │ ${hours} │`);
-      if (i < sessions.length - 1) {
+      rowIndex++;
+      if (rowIndex < rowCount) {
         console.log(sep);
       }
     }
 
-    console.log("└──────────┴───────┼───────────────┤");
-    console.log(`                   │ Total Day: ${dayHours.padStart(4)} │`);
-    console.log("                   └───────────────┘\n");
+    for (const absence of absences) {
+      const id = absence.id.padStart(8);
+      const typeLabel = absenceTypeLabel(absence.type);
+      const durLabel = (absence.duration === "half" ? "half " : "full ");
+      const hours = (absenceDuration(absence) / 60).toFixed(1).padStart(5);
+      console.log(`│ ${id} │ ${typeLabel} │ ${durLabel} │ ${hours} │`);
+      rowIndex++;
+      if (rowIndex < rowCount) {
+        console.log(sep);
+      }
+    }
+
+    console.log("└──────────┼───────┴───────┴───────┤");
+    console.log(`           │${(`Total Day: ${dayHours.padStart(4)}`).padStart(22)} │`);
+    console.log("           └───────────────────────┘\n");
   }
 
   console.log("─────────────────────────────────────");
@@ -240,7 +327,10 @@ async function exportCsv(output?: string): Promise<void> {
   ];
 
   const grouped = groupByDate(allSessions);
-  const dates = [...grouped.keys()].sort(); // Oldest to newest
+  const groupedAbsences = groupAbsencesByDate(store.absences);
+
+  const dateSet = new Set([...grouped.keys(), ...groupedAbsences.keys()]);
+  const dates = [...dateSet].sort();
 
   if (dates.length === 0) {
     console.log("No sessions to export");
@@ -252,8 +342,8 @@ async function exportCsv(output?: string): Promise<void> {
   let totalMinutes = 0;
 
   for (const date of dates) {
-    const sessions = grouped.get(date);
-    if (!sessions) continue;
+    const sessions = grouped.get(date) || [];
+    const absences = groupedAbsences.get(date) || [];
 
     let dayMinutes = 0;
 
@@ -262,6 +352,12 @@ async function exportCsv(output?: string): Promise<void> {
       const endTime = session.endTime ? toTimeStr(session.endTime) : "ongoing";
       lines.push(`${session.date},${toTimeStr(session.startTime)},${endTime},${hours}`);
       dayMinutes += sessionDuration(session);
+    }
+
+    for (const absence of absences) {
+      const hours = (absenceDuration(absence) / 60).toFixed(2);
+      lines.push(`${absence.date},${absence.type},${absence.duration} day,${hours}`);
+      dayMinutes += absenceDuration(absence);
     }
 
     // Daily total row
@@ -318,10 +414,46 @@ async function stop(): Promise<void> {
   await save(store);
 }
 
-/** Adds a past work session manually */
-async function add(date: string, startTime?: string, endTime?: string): Promise<void> {
+/** Adds a past work session or absence manually */
+async function add(date: string, startTime?: string, endTime?: string, sick?: boolean, vacation?: boolean, half?: boolean): Promise<void> {
+  const absenceType: AbsenceType | null = sick ? "sick" : vacation ? "vacation" : null;
+
+  if (absenceType) {
+    const store = await load();
+    const duration: AbsenceDuration = half ? "half" : "full";
+    const existing = store.absences.filter(a => a.date === date && a.type === absenceType);
+    const action = resolveAbsenceAdd(existing, duration);
+
+    if (action === "blocked") {
+      console.log(`Already have a full day ${absenceType} on ${date}`);
+      return;
+    }
+
+    if (action === "upgrade") {
+      existing[0].duration = "full";
+      await save(store);
+      console.log(`Upgraded ${absenceType} on ${date} to full day: 8.0h`);
+      return;
+    }
+
+    const absence: Absence = {
+      id: generateId(),
+      date,
+      type: absenceType,
+      duration,
+    };
+
+    store.absences.push(absence);
+    store.absences.sort((a, b) => a.date.localeCompare(b.date));
+    await save(store);
+
+    const hours = (ABSENCE_MINUTES[duration] / 60).toFixed(1);
+    console.log(`Added ${absenceType} (${duration} day) on ${date}: ${hours}h`);
+    return;
+  }
+
   if (!startTime || !endTime) {
-    fail("--start and --end required");
+    fail("--start and --end required (or use --sick / --vacation)");
   }
 
   const store = await load();
@@ -343,22 +475,28 @@ async function add(date: string, startTime?: string, endTime?: string): Promise<
 
 /** Lists all sessions for a specific date */
 async function list(date: string): Promise<void> {
-  const { sessions, currentSession } = await load();
-  const filtered = sessions.filter(s => s.date === date);
+  const store = await load();
+  const filtered = store.sessions.filter(s => s.date === date);
 
   // Include current session if it matches the date
-  if (currentSession && currentSession.date === date) {
-    filtered.push(currentSession);
+  if (store.currentSession && store.currentSession.date === date) {
+    filtered.push(store.currentSession);
   }
 
-  if (filtered.length === 0) {
+  const absences = store.absences.filter(a => a.date === date);
+
+  if (filtered.length === 0 && absences.length === 0) {
     console.log(`No sessions for ${date}`);
     return;
   }
 
   // Calculate total hours
-  const totalMinutes = filtered.reduce((sum, s) => sum + sessionDuration(s), 0);
+  const sessionMins = filtered.reduce((sum, s) => sum + sessionDuration(s), 0);
+  const absenceMins = absences.reduce((sum, a) => sum + absenceDuration(a), 0);
+  const totalMinutes = sessionMins + absenceMins;
   const totalHours = (totalMinutes / 60).toFixed(1);
+
+  const rowCount = filtered.length + absences.length;
 
   // Table drawing
   const top    = "┌──────────┬───────┬───────┬───────┐";
@@ -370,21 +508,35 @@ async function list(date: string): Promise<void> {
   console.log(header);
   console.log(sep);
 
-  for (let i = 0; i < filtered.length; i++) {
-    const session = filtered[i];
+  let rowIndex = 0;
+
+  for (const session of filtered) {
     const id = session.id.padStart(8);
     const start = toTimeStr(session.startTime);
     const end = session.endTime ? toTimeStr(session.endTime) : "now  ";
     const hours = (sessionDuration(session) / 60).toFixed(1).padStart(5);
     console.log(`│ ${id} │ ${start} │ ${end} │ ${hours} │`);
-    if (i < filtered.length - 1) {
+    rowIndex++;
+    if (rowIndex < rowCount) {
       console.log(sep);
     }
   }
 
-  console.log("└──────────┴───────┼───────────────┤");
-  console.log(`                   │ Total Day: ${totalHours.padStart(4)} │`);
-  console.log("                   └───────────────┘");
+  for (const absence of absences) {
+    const id = absence.id.padStart(8);
+    const typeLabel = absenceTypeLabel(absence.type);
+    const durLabel = (absence.duration === "half" ? "half " : "full ");
+    const hours = (absenceDuration(absence) / 60).toFixed(1).padStart(5);
+    console.log(`│ ${id} │ ${typeLabel} │ ${durLabel} │ ${hours} │`);
+    rowIndex++;
+    if (rowIndex < rowCount) {
+      console.log(sep);
+    }
+  }
+
+  console.log("└──────────┼───────┴───────┴───────┤");
+  console.log(`           │${(`Total Day: ${totalHours.padStart(4)}`).padStart(22)} │`);
+  console.log("           └───────────────────────┘");
 
   console.log("\nUse --id with edit/delete commands");
 }
@@ -430,7 +582,7 @@ async function edit(
   console.log(`Updated: ${session.date} ${toTimeStr(session.startTime)} - ${endStr}`);
 }
 
-/** Deletes a session */
+/** Deletes a session or absence */
 async function del(id?: string): Promise<void> {
   if (!id) {
     fail("--id required");
@@ -438,7 +590,7 @@ async function del(id?: string): Promise<void> {
 
   const store = await load();
 
-  // Find session by ID prefix - check both completed sessions and current session
+  // Find session by ID prefix - check completed sessions
   const index = store.sessions.findIndex(s => s.id.startsWith(id));
 
   if (index !== -1) {
@@ -454,6 +606,16 @@ async function del(id?: string): Promise<void> {
     store.currentSession = null;
     await save(store);
     console.log(`Deleted current session: ${deleted.date} ${toTimeStr(deleted.startTime)}`);
+    return;
+  }
+
+  // Check absences
+  const absenceIndex = store.absences.findIndex(a => a.id.startsWith(id));
+
+  if (absenceIndex !== -1) {
+    const [deleted] = store.absences.splice(absenceIndex, 1);
+    await save(store);
+    console.log(`Deleted ${deleted.type} (${deleted.duration} day) on ${deleted.date}`);
     return;
   }
 
@@ -487,19 +649,24 @@ Commands:
   export [-o FILE]    Export CSV
   start / stop        Manual session control
   add --date --start --end    Add past session
+  add --sick [--half] [--date]     Add sick leave
+  add --vacation [--half] [--date] Add vacation
   list --date         List sessions for date
   edit --id [--start] [--end] Edit session
-  delete --id         Delete session
+  delete --id         Delete session or absence
   log                 Show event log
   daemon              Start background daemon
   version             Show version
 
 Options:
   -o, --output FILE   Output file
-  --date YYYY-MM-DD   Target date
+  --date YYYY-MM-DD   Target date (default: today)
   --start HH:MM       Start time
   --end HH:MM         End time
   --id ID             Session ID
+  --sick              Mark as sick leave
+  --vacation          Mark as vacation
+  --half              Half day (4h, default: full 8h)
 `;
 
 // ============================================================================
@@ -522,7 +689,7 @@ async function main(): Promise<void> {
     log,
     report,
     export: () => exportCsv(args.output),
-    add: () => add(args.date, args.start, args.end),
+    add: () => add(args.date, args.start, args.end, args.sick, args.vacation, args.half),
     list: () => list(args.date),
     edit: () => edit(args.id, args.date, args.start, args.end),
     delete: () => del(args.id),

@@ -18,6 +18,7 @@
 import { load, save, createSession, appendLog, toDateStr, minutesBetween } from "./storage";
 import { watchEvents } from "./macos-events";
 import { DATA_DIR } from "./config";
+import { checkForUpdate } from "./version-check";
 import type { Store, Event } from "./types";
 
 /**
@@ -38,6 +39,7 @@ export function processEvent(event: Event, store: Store, now = new Date()): Stor
   const updated: Store = {
     ...store,
     sessions: [...store.sessions],
+    absences: [...(store.absences ?? [])],
     currentSession: store.currentSession,
   };
 
@@ -116,6 +118,9 @@ async function main(): Promise<void> {
   console.log("Work Tracker Daemon starting...");
   console.log(`Data: ${DATA_DIR}`);
 
+  // Fire-and-forget update check (never blocks startup)
+  checkForUpdate();
+
   // Load existing data
   let store = await load();
 
@@ -132,6 +137,9 @@ async function main(): Promise<void> {
   for await (const event of watchEvents()) {
     // Log the event for debugging
     await appendLog(event);
+
+    // Reload from disk to pick up any CLI edits (e.g., added absences, manual sessions)
+    store = await load();
 
     // Process the event and update state
     store = processEvent(event, store);
