@@ -305,6 +305,7 @@ describe("Store serialization", () => {
         startTime: "2026-01-23T09:00:00.000Z",
         endTime: null,
       },
+      absences: [],
     };
 
     // Serialize and deserialize
@@ -323,6 +324,7 @@ describe("Store serialization", () => {
       version: 1,
       sessions: [],
       currentSession: null,
+      absences: [],
     };
 
     const json = JSON.stringify(store, null, 2);
