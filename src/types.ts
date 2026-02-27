@@ -44,6 +44,46 @@ export interface Store {
 
   /** The currently active session, or null if not working */
   currentSession: Session | null;
+
+  /** All absence entries (sick leaves and vacations) */
+  absences: Absence[];
+}
+
+/**
+ * Type of absence entry.
+ */
+export type AbsenceType = "sick" | "vacation";
+
+/**
+ * Duration of an absence entry.
+ * - "full": full day (8 hours)
+ * - "half": half day (4 hours)
+ */
+export type AbsenceDuration = "full" | "half";
+
+/**
+ * A single absence entry (sick leave or vacation).
+ *
+ * @example
+ * {
+ *   id: "x9y8z7w6",
+ *   date: "2026-02-09",
+ *   type: "sick",
+ *   duration: "full"
+ * }
+ */
+export interface Absence {
+  /** Unique identifier - 8 random alphanumeric characters */
+  id: string;
+
+  /** Date in YYYY-MM-DD format */
+  date: string;
+
+  /** Type of absence */
+  type: AbsenceType;
+
+  /** Full day (8h) or half day (4h) */
+  duration: AbsenceDuration;
 }
 
 /**
