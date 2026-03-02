@@ -24,12 +24,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/cassmtnr/working-time.git"
+    "url": "git+https://github.com/cassmtnr/macos-active-time.git"
   },
   "bugs": {
-    "url": "https://github.com/cassmtnr/working-time/issues"
+    "url": "https://github.com/cassmtnr/macos-active-time/issues"
   },
-  "homepage": "https://github.com/cassmtnr/working-time#readme",
+  "homepage": "https://github.com/cassmtnr/macos-active-time#readme",
   "dependencies": {},
   "devDependencies": {
     "@eslint/js": "^9.0.0",
