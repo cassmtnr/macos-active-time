@@ -1,7 +1,7 @@
-# Work Tracker
+# macOS Active Time
 
-[![CI](https://github.com/cassmtnr/working-time/actions/workflows/ci.yml/badge.svg)](https://github.com/cassmtnr/working-time/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/cassmtnr/working-time/graph/badge.svg)](https://codecov.io/gh/cassmtnr/working-time)
+[![CI](https://github.com/cassmtnr/macos-active-time/actions/workflows/ci.yml/badge.svg)](https://github.com/cassmtnr/macos-active-time/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/cassmtnr/macos-active-time/graph/badge.svg)](https://codecov.io/gh/cassmtnr/macos-active-time)
 ![Platform](https://img.shields.io/badge/platform-macOS-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -31,8 +31,8 @@ That's it. Simple.
 
 ```bash
 # Clone and install
-git clone https://github.com/cassmtnr/working-time.git
-cd working-time
+git clone https://github.com/cassmtnr/macos-active-time.git
+cd macos-active-time
 ./install.sh
 ```
 
@@ -65,9 +65,9 @@ Sessions for 2026-01-22:
 │ a1b2c3d4 │ 09:15 │ 12:30 │   3.3 │
 ├──────────┼───────┼───────┼───────┤
 │ e5f6g7h8 │ 13:15 │ now   │   4.0 │
-└──────────┴───────┼───────────────┤
-                   │ Total Day: 7.3 │
-                   └───────────────┘
+├──────────┴───────┴───────┴───────┤
+│                   Total Day: 7.3 │
+└──────────────────────────────────┘
 
 Use --id with edit/delete commands
 ```
@@ -116,9 +116,9 @@ Work Report
 │    ID    │ Start │  End  │ Hours │
 ├──────────┼───────┼───────┼───────┤
 │ x9y8z7w6 │ 08:45 │ 17:30 │   8.8 │
-└──────────┴───────┼───────────────┤
-                   │ Total Day: 8.8 │
-                   └───────────────┘
+├──────────┴───────┴───────┴───────┤
+│                   Total Day: 8.8 │
+└──────────────────────────────────┘
 
 2026-01-22:
 
@@ -128,9 +128,9 @@ Work Report
 │ a1b2c3d4 │ 09:15 │ 12:30 │   3.3 │
 ├──────────┼───────┼───────┼───────┤
 │ e5f6g7h8 │ 13:15 │ now   │   4.0 │
-└──────────┴───────┼───────────────┤
-                   │ Total Day: 7.3 │
-                   └───────────────┘
+├──────────┴───────┴───────┴───────┤
+│                   Total Day: 7.3 │
+└──────────────────────────────────┘
 
 ─────────────────────────────────────
 Total Month: 16h 6m over 2 days
@@ -227,9 +227,9 @@ Sessions for 2026-01-22:
 │ a1b2c3d4 │ 09:15 │ 12:30 │   3.3 │
 ├──────────┼───────┼───────┼───────┤
 │ e5f6g7h8 │ 13:15 │ 17:45 │   4.5 │
-└──────────┴───────┼───────────────┤
-                   │ Total Day: 7.8 │
-                   └───────────────┘
+├──────────┴───────┴───────┴───────┤
+│                   Total Day: 7.8 │
+└──────────────────────────────────┘
 
 Use --id with edit/delete commands
 ```
