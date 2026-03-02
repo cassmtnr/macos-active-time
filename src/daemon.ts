@@ -18,7 +18,6 @@
 import { load, save, createSession, appendLog, toDateStr, minutesBetween } from "./storage";
 import { watchEvents } from "./macos-events";
 import { DATA_DIR } from "./config";
-import { checkForUpdate } from "./version-check";
 import type { Store, Event } from "./types";
 
 /**
@@ -134,9 +133,6 @@ async function main(): Promise<void> {
   for await (const event of watchEvents()) {
     // Log the event for debugging
     await appendLog(event);
-
-    // Check for updates once per day on unlock
-    if (event === "unlock") checkForUpdate();
 
     // Reload from disk to pick up any CLI edits (e.g., added absences, manual sessions)
     store = await load();
