@@ -3,9 +3,6 @@
   "version": "0.0.1",
   "description": "Automatic work time tracker for macOS - tracks screen lock/unlock events",
   "type": "module",
-  "bin": {
-    "work-tracker": "./src/cli.ts"
-  },
   "scripts": {
     "start": "bun run src/daemon.ts",
     "cli": "bun run src/cli.ts",
@@ -14,9 +11,7 @@
     "test:watch": "bun test --watch",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
-    "typecheck": "tsc --noEmit",
-    "postinstall": "command -v bun >/dev/null 2>&1 || echo '\\n⚠  macos-work-tracker requires Bun (https://bun.sh) — install it with: curl -fsSL https://bun.sh/install | bash\\n'",
-    "prepublishOnly": "bun run lint && bun run typecheck && bun test"
+    "typecheck": "tsc --noEmit"
   },
   "keywords": [
     "work-tracker",
@@ -35,19 +30,6 @@
     "url": "https://github.com/cassmtnr/working-time/issues"
   },
   "homepage": "https://github.com/cassmtnr/working-time#readme",
-  "engines": {
-    "node": ">=18.0.0"
-  },
-  "os": [
-    "darwin"
-  ],
-  "files": [
-    "src/**/*",
-    "config/**/*",
-    "install.sh",
-    "uninstall.sh",
-    "README.md"
-  ],
   "dependencies": {},
   "devDependencies": {
     "@eslint/js": "^9.0.0",
