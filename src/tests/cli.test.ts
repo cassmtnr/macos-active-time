@@ -291,4 +291,123 @@ describe("parseArgs", () => {
     expect(parseArgs(["-v"])?.command).toBe("-v");
     expect(parseArgs(["--version"])?.command).toBe("--version");
   });
+
+  // ---- explicitDate flag ----
+
+  test("sets explicitDate to true when --date is explicitly passed", () => {
+    const result = parseArgs(["edit", "--id", "abc123", "--date", "2026-01-22"]);
+
+    expect(result).not.toBeNull();
+    expect(result?.explicitDate).toBe(true);
+  });
+
+  test("leaves explicitDate undefined when --date is NOT passed", () => {
+    const result = parseArgs(["edit", "--id", "abc123", "--start", "09:00"]);
+
+    expect(result).not.toBeNull();
+    // date should be set to today's default, but explicitDate must remain undefined
+    expect(result?.explicitDate).toBeUndefined();
+    expect(result?.date).toBeTruthy(); // still has a default date value
+  });
+
+  test("leaves explicitDate undefined for commands with no flags at all", () => {
+    const result = parseArgs(["status"]);
+
+    expect(result).not.toBeNull();
+    expect(result?.explicitDate).toBeUndefined();
+  });
+
+  test("sets explicitDate to true and preserves the date value", () => {
+    const result = parseArgs(["list", "--date", "2026-03-15"]);
+
+    expect(result?.explicitDate).toBe(true);
+    expect(result?.date).toBe("2026-03-15");
+  });
+
+  test("explicitDate is undefined even when other flags are present", () => {
+    const result = parseArgs(["add", "--start", "09:00", "--end", "17:00"]);
+
+    expect(result).not.toBeNull();
+    expect(result?.explicitDate).toBeUndefined();
+  });
+
+  // ---- edit command dispatch: date is conditional on explicitDate ----
+
+  test("edit without --date results in explicitDate undefined so edit receives no date", () => {
+    // When edit is called without --date, args.explicitDate is undefined (falsy).
+    // The dispatch: edit(args.id, args.explicitDate ? args.date : undefined, ...)
+    // So date passed to edit() must be undefined — preserving the session's existing date.
+    const result = parseArgs(["edit", "--id", "abc123", "--start", "10:00"]);
+
+    expect(result?.explicitDate).toBeUndefined();
+    // Simulate the dispatch logic from main()
+    const datePassedToEdit = result?.explicitDate ? result.date : undefined;
+    expect(datePassedToEdit).toBeUndefined();
+  });
+
+  test("edit with --date results in explicitDate true so edit receives the date", () => {
+    const result = parseArgs(["edit", "--id", "abc123", "--date", "2026-05-20", "--start", "10:00"]);
+
+    expect(result?.explicitDate).toBe(true);
+    // Simulate the dispatch logic from main()
+    const datePassedToEdit = result?.explicitDate ? result.date : undefined;
+    expect(datePassedToEdit).toBe("2026-05-20");
+  });
+
+  test("edit with --start and no --date: dispatch passes undefined for date", () => {
+    // The critical regression case: editing only the time should not accidentally
+    // move the session to today's date.
+    const result = parseArgs(["edit", "--id", "xyz789", "--start", "08:30"]);
+
+    expect(result).not.toBeNull();
+    expect(result?.start).toBe("08:30");
+    expect(result?.explicitDate).toBeUndefined();
+
+    const datePassedToEdit = result?.explicitDate ? result.date : undefined;
+    expect(datePassedToEdit).toBeUndefined(); // must be undefined, not today's date
+  });
+
+  test("edit with --end and no --date: dispatch passes undefined for date", () => {
+    const result = parseArgs(["edit", "--id", "xyz789", "--end", "17:45"]);
+
+    expect(result).not.toBeNull();
+    expect(result?.end).toBe("17:45");
+    expect(result?.explicitDate).toBeUndefined();
+
+    const datePassedToEdit = result?.explicitDate ? result.date : undefined;
+    expect(datePassedToEdit).toBeUndefined();
+  });
+
+  // ---- absence flags ----
+
+  test("parses --sick flag alone", () => {
+    const result = parseArgs(["add", "--sick"]);
+
+    expect(result?.sick).toBe(true);
+    expect(result?.vacation).toBeUndefined();
+    expect(result?.half).toBeUndefined();
+  });
+
+  test("parses --vacation flag alone", () => {
+    const result = parseArgs(["add", "--vacation"]);
+
+    expect(result?.vacation).toBe(true);
+    expect(result?.sick).toBeUndefined();
+  });
+
+  test("parses --half flag combined with --sick", () => {
+    const result = parseArgs(["add", "--sick", "--half"]);
+
+    expect(result?.sick).toBe(true);
+    expect(result?.half).toBe(true);
+  });
+
+  test("parses --vacation with --date and --half", () => {
+    const result = parseArgs(["add", "--vacation", "--date", "2026-04-01", "--half"]);
+
+    expect(result?.vacation).toBe(true);
+    expect(result?.half).toBe(true);
+    expect(result?.date).toBe("2026-04-01");
+    expect(result?.explicitDate).toBe(true);
+  });
 });
