@@ -529,5 +529,50 @@ describe("Absence functionality", () => {
       ];
       expect(resolveAbsenceAdd(existing)).toBe("upgrade");
     });
+
+    test("allows adding a different absence type on the same date (each type is filtered independently)", async () => {
+      const { resolveAbsenceAdd } = await import("../cli");
+
+      // In the add() command, `existing` is already filtered by type.
+      // So if we pass an empty list for a new type, it should return "add".
+      // Two different types (sick + vacation) on the same date are allowed.
+      const existingSickAbsences: Absence[] = [];   // no sick yet on this date
+      const existingVacationAbsences: Absence[] = [
+        { id: "v1", date: "2026-02-09", type: "vacation", duration: "half" },
+      ];
+
+      // Adding sick leave when none exists → should be "add"
+      expect(resolveAbsenceAdd(existingSickAbsences)).toBe("add");
+
+      // Adding more vacation when half already exists → should be "upgrade"
+      expect(resolveAbsenceAdd(existingVacationAbsences)).toBe("upgrade");
+    });
+
+    test("blocks when two half-day absences of the same type exist (total >= full)", async () => {
+      const { resolveAbsenceAdd } = await import("../cli");
+
+      // Two half-day sick leaves = 480 minutes total = full day → blocked
+      const existing: Absence[] = [
+        { id: "a1", date: "2026-02-09", type: "sick", duration: "half" },
+        { id: "a2", date: "2026-02-09", type: "sick", duration: "half" },
+      ];
+      expect(resolveAbsenceAdd(existing)).toBe("blocked");
+    });
+
+    test("allows adding a half-day absence when date has no same-type absence", async () => {
+      const { resolveAbsenceAdd } = await import("../cli");
+      // No existing same-type absences
+      expect(resolveAbsenceAdd([])).toBe("add");
+    });
+
+    test("upgrade: single half-day presence regardless of type label", async () => {
+      const { resolveAbsenceAdd } = await import("../cli");
+
+      // Should upgrade for sick half-day too (not just vacation)
+      const existing: Absence[] = [
+        { id: "a1", date: "2026-02-09", type: "sick", duration: "half" },
+      ];
+      expect(resolveAbsenceAdd(existing)).toBe("upgrade");
+    });
   });
 });
