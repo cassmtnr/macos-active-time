@@ -11,7 +11,7 @@
  * - File I/O operations (load, save, appendLog, readLog)
  */
 
-import { describe, test, expect } from "bun:test";
+import { describe, test, expect, spyOn, beforeEach, afterEach } from "bun:test";
 import {
   toDateStr,
   toTimeStr,
@@ -22,6 +22,7 @@ import {
   parseTimeToISO,
   generateId,
   createSession,
+  appendLog,
 } from "../storage";
 import type { Store } from "../types";
 
@@ -283,6 +284,189 @@ describe("createSession", () => {
     const session1 = createSession();
     const session2 = createSession();
     expect(session1.id).not.toBe(session2.id);
+  });
+});
+
+// ============================================================================
+// appendLog and readLog
+// ============================================================================
+
+describe("appendLog", () => {
+  let appendFileSpy: ReturnType<typeof spyOn>;
+
+  beforeEach(async () => {
+    const fsPromises = await import("fs/promises");
+    appendFileSpy = spyOn(fsPromises, "appendFile").mockImplementation(async () => {});
+  });
+
+  afterEach(() => {
+    appendFileSpy.mockRestore();
+  });
+
+  test("writes a line in [ISO_TIMESTAMP] message format", async () => {
+    const before = new Date();
+    await appendLog("lock");
+    const after = new Date();
+
+    expect(appendFileSpy).toHaveBeenCalledTimes(1);
+    const [, line] = appendFileSpy.mock.calls[0] as [string, string];
+
+    // Line must end with newline
+    expect(line).toMatch(/\n$/);
+
+    // Line must contain the message
+    expect(line).toContain("lock");
+
+    // Line must start with an ISO timestamp in brackets
+    const match = line.match(/^\[(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z)\] (.+)\n$/);
+    expect(match).not.toBeNull();
+
+    if (match) {
+      // Timestamp must be within the test window
+      const timestamp = new Date(match[1]);
+      expect(timestamp.getTime()).toBeGreaterThanOrEqual(before.getTime());
+      expect(timestamp.getTime()).toBeLessThanOrEqual(after.getTime());
+
+      // Message must be the event name
+      expect(match[2]).toBe("lock");
+    }
+  });
+
+  test("writes unlock event with correct format", async () => {
+    await appendLog("unlock");
+
+    const [, line] = appendFileSpy.mock.calls[0] as [string, string];
+    expect(line).toContain("unlock");
+    expect(line).toMatch(/^\[.+\] unlock\n$/);
+  });
+
+  test("writes startup event with correct format", async () => {
+    await appendLog("startup");
+
+    const [, line] = appendFileSpy.mock.calls[0] as [string, string];
+    expect(line).toContain("startup");
+    expect(line).toMatch(/^\[.+\] startup\n$/);
+  });
+
+  test("writes to the LOG_FILE path", async () => {
+    await appendLog("lock");
+
+    const [filePath] = appendFileSpy.mock.calls[0] as [string, string];
+    // Should be writing to the events.log file inside the data directory
+    expect(filePath).toContain("events.log");
+    expect(filePath).toContain(".work-tracker");
+  });
+
+  test("appends a trailing newline to every log line", async () => {
+    await appendLog("test-event");
+
+    const [, line] = appendFileSpy.mock.calls[0] as [string, string];
+    expect(line.endsWith("\n")).toBe(true);
+  });
+});
+
+describe("readLog", () => {
+  test("returns empty array when log file does not exist", async () => {
+    // Use a path that definitely does not exist
+    const { readLog: readLogDirect } = await import("../storage");
+
+    // Spy Bun.file to simulate file not existing
+    const bunFileSpy = spyOn(Bun, "file").mockImplementation(() => {
+      return {
+        exists: async () => false,
+        text: async () => "",
+      } as unknown as ReturnType<typeof Bun.file>;
+    });
+
+    const lines = await readLogDirect();
+
+    expect(lines).toEqual([]);
+    bunFileSpy.mockRestore();
+  });
+
+  test("returns all lines from a small log file", async () => {
+    const { readLog: readLogDirect } = await import("../storage");
+
+    const logContent = "[2026-01-22T09:00:00.000Z] unlock\n[2026-01-22T17:00:00.000Z] lock\n";
+
+    const bunFileSpy = spyOn(Bun, "file").mockImplementation(() => {
+      return {
+        exists: async () => true,
+        text: async () => logContent,
+      } as unknown as ReturnType<typeof Bun.file>;
+    });
+
+    const lines = await readLogDirect();
+
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toBe("[2026-01-22T09:00:00.000Z] unlock");
+    expect(lines[1]).toBe("[2026-01-22T17:00:00.000Z] lock");
+    bunFileSpy.mockRestore();
+  });
+
+  test("returns only the last N lines when log has more than N lines", async () => {
+    const { readLog: readLogDirect } = await import("../storage");
+
+    // Generate 25 log lines (more than default 20)
+    const allLines = Array.from({ length: 25 }, (_, i) => `[2026-01-22T09:0${String(i).padStart(1, "0")}:00.000Z] event${i}`);
+    const logContent = allLines.join("\n") + "\n";
+
+    const bunFileSpy = spyOn(Bun, "file").mockImplementation(() => {
+      return {
+        exists: async () => true,
+        text: async () => logContent,
+      } as unknown as ReturnType<typeof Bun.file>;
+    });
+
+    const lines = await readLogDirect(); // default 20 lines
+
+    // Should return only the last 20 lines
+    expect(lines).toHaveLength(20);
+    expect(lines[0]).toBe(allLines[5]); // first of the last 20
+    expect(lines[19]).toBe(allLines[24]); // last line
+    bunFileSpy.mockRestore();
+  });
+
+  test("accepts a custom line count parameter", async () => {
+    const { readLog: readLogDirect } = await import("../storage");
+
+    const allLines = Array.from({ length: 10 }, (_, i) => `line${i}`);
+    const logContent = allLines.join("\n") + "\n";
+
+    const bunFileSpy = spyOn(Bun, "file").mockImplementation(() => {
+      return {
+        exists: async () => true,
+        text: async () => logContent,
+      } as unknown as ReturnType<typeof Bun.file>;
+    });
+
+    const lines5 = await readLogDirect(5);
+    expect(lines5).toHaveLength(5);
+    expect(lines5[0]).toBe("line5");
+    expect(lines5[4]).toBe("line9");
+
+    const lines3 = await readLogDirect(3);
+    expect(lines3).toHaveLength(3);
+    expect(lines3[0]).toBe("line7");
+
+    bunFileSpy.mockRestore();
+  });
+
+  test("returns all lines when file has fewer lines than requested", async () => {
+    const { readLog: readLogDirect } = await import("../storage");
+
+    const logContent = "line1\nline2\nline3\n";
+
+    const bunFileSpy = spyOn(Bun, "file").mockImplementation(() => {
+      return {
+        exists: async () => true,
+        text: async () => logContent,
+      } as unknown as ReturnType<typeof Bun.file>;
+    });
+
+    const lines = await readLogDirect(100); // request more than exists
+    expect(lines).toHaveLength(3);
+    bunFileSpy.mockRestore();
   });
 });
 

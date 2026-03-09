@@ -29,6 +29,7 @@ export interface Args {
   command: string;
   output?: string;
   date: string;
+  explicitDate?: boolean;
   start?: string;
   end?: string;
   id?: string;
@@ -72,6 +73,7 @@ export function parseArgs(argv?: string[]): Args | null {
         return null;
       }
       result.date = next;
+      result.explicitDate = true;
       i++;
     } else if (arg === "--start" && next) {
       if (!isValidTime(next)) {
@@ -567,7 +569,14 @@ async function edit(
 
   // Update fields that were provided
   const targetDate = date || session.date;
-  if (date) session.date = date;
+  if (date) {
+    session.date = date;
+    // Rebuild ISO timestamps with the new date to keep them consistent
+    session.startTime = parseTimeToISO(targetDate, toTimeStr(session.startTime));
+    if (session.endTime) {
+      session.endTime = parseTimeToISO(targetDate, toTimeStr(session.endTime));
+    }
+  }
   if (startTime) session.startTime = parseTimeToISO(targetDate, startTime);
   if (endTime) session.endTime = parseTimeToISO(targetDate, endTime);
 
@@ -690,7 +699,7 @@ async function main(): Promise<void> {
     export: () => exportCsv(args.output),
     add: () => add(args.date, args.start, args.end, args.sick, args.vacation, args.half),
     list: () => list(args.date),
-    edit: () => edit(args.id, args.date, args.start, args.end),
+    edit: () => edit(args.id, args.explicitDate ? args.date : undefined, args.start, args.end),
     delete: () => del(args.id),
     daemon: () => import("./daemon").then(() => {}),
     help: async () => console.log(HELP),
