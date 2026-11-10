@@ -6,28 +6,11 @@
  */
 
 import { homedir } from "os";
-import { join, dirname } from "path";
-import { fileURLToPath } from "url";
+import { join } from "path";
+import pkg from "../package.json";
 
-// Fallback version for compiled binary
-const FALLBACK_VERSION = "0.0.1";
-
-// Read version from package.json (may fail in compiled binary)
-let version = FALLBACK_VERSION;
-try {
-  const __dirname = dirname(fileURLToPath(import.meta.url));
-  // Skip if running in Bun's virtual filesystem (compiled binary)
-  if (!__dirname.startsWith("/$bunfs")) {
-    const packageJsonPath = join(__dirname, "..", "package.json");
-    const packageJson = await Bun.file(packageJsonPath).json();
-    version = packageJson.version;
-  }
-} catch {
-  // Use fallback version if package.json can't be read
-}
-
-/** Application version from package.json */
-export const VERSION: string = version;
+/** Application version from package.json (inlined at compile time) */
+export const VERSION: string = pkg.version;
 
 /** Application name */
 export const APP_NAME = "work-tracker";

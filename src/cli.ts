@@ -722,7 +722,7 @@ async function main(): Promise<void> {
     list: () => list(args.date),
     edit: () => edit(args.id, args.explicitDate ? args.date : undefined, args.start, args.end),
     delete: () => del(args.id),
-    daemon: () => import("./daemon").then(() => {}),
+    daemon: () => import("./daemon").then(m => m.main()),
     help: async () => console.log(HELP),
     "-h": async () => console.log(HELP),
     "--help": async () => console.log(HELP),
