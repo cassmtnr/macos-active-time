@@ -361,6 +361,19 @@ describe("Absence functionality", () => {
 
       expect(absenceDuration(absence)).toBe(240);
     });
+
+    test("returns 480 minutes for holiday full day", async () => {
+      const { absenceDuration } = await import("../cli");
+
+      const absence: Absence = {
+        id: "abs3",
+        date: "2026-02-11",
+        type: "holiday",
+        duration: "full",
+      };
+
+      expect(absenceDuration(absence)).toBe(480);
+    });
   });
 
   describe("groupAbsencesByDate", () => {
@@ -371,13 +384,14 @@ describe("Absence functionality", () => {
         { id: "a1", date: "2026-02-09", type: "sick", duration: "full" },
         { id: "a2", date: "2026-02-09", type: "vacation", duration: "half" },
         { id: "a3", date: "2026-02-10", type: "sick", duration: "half" },
+        { id: "a4", date: "2026-02-10", type: "holiday", duration: "full" },
       ];
 
       const grouped = groupAbsencesByDate(absences);
 
       expect(grouped.size).toBe(2);
       expect(grouped.get("2026-02-09")?.length).toBe(2);
-      expect(grouped.get("2026-02-10")?.length).toBe(1);
+      expect(grouped.get("2026-02-10")?.length).toBe(2);
     });
 
     test("returns empty map for no absences", async () => {
@@ -409,6 +423,15 @@ describe("Absence functionality", () => {
       expect(result?.vacation).toBe(true);
     });
 
+    test("parses --holiday flag", async () => {
+      const { parseArgs } = await import("../cli");
+
+      const result = parseArgs(["add", "--holiday"]);
+      expect(result).not.toBeNull();
+      expect(result?.command).toBe("add");
+      expect(result?.holiday).toBe(true);
+    });
+
     test("parses --half flag", async () => {
       const { parseArgs } = await import("../cli");
 
@@ -424,6 +447,16 @@ describe("Absence functionality", () => {
       const result = parseArgs(["add", "--vacation", "--date", "2026-02-10", "--half"]);
       expect(result).not.toBeNull();
       expect(result?.vacation).toBe(true);
+      expect(result?.half).toBe(true);
+      expect(result?.date).toBe("2026-02-10");
+    });
+
+    test("parses --holiday with --date and --half", async () => {
+      const { parseArgs } = await import("../cli");
+
+      const result = parseArgs(["add", "--holiday", "--date", "2026-02-10", "--half"]);
+      expect(result).not.toBeNull();
+      expect(result?.holiday).toBe(true);
       expect(result?.half).toBe(true);
       expect(result?.date).toBe("2026-02-10");
     });
@@ -444,16 +477,17 @@ describe("Absence functionality", () => {
 
       const absences: Absence[] = [
         { id: "a1", date: "2026-02-09", type: "vacation", duration: "half" },
+        { id: "a2", date: "2026-02-09", type: "holiday", duration: "half" },
       ];
 
       const sessionMins = sessions.reduce((sum, s) => sum + sessionDuration(s), 0);
       const absenceMins = absences.reduce((sum, a) => sum + absenceDuration(a), 0);
       const totalMinutes = sessionMins + absenceMins;
 
-      // 4h work + 4h half-day vacation = 8h = 480 minutes
+      // 4h work + 4h vacation + 4h holiday = 12h = 720 minutes
       expect(sessionMins).toBe(240);
-      expect(absenceMins).toBe(240);
-      expect(totalMinutes).toBe(480);
+      expect(absenceMins).toBe(480);
+      expect(totalMinutes).toBe(720);
     });
 
     test("full day sick leave equals 8 hours", async () => {
@@ -479,13 +513,15 @@ describe("Absence functionality", () => {
         absences: [
           { id: "abs1", date: "2026-01-23", type: "sick", duration: "full" },
           { id: "abs2", date: "2026-01-24", type: "vacation", duration: "half" },
+          { id: "abs3", date: "2026-01-25", type: "holiday", duration: "full" },
         ],
       };
 
       expect(store.sessions.length).toBe(3);
-      expect(store.absences.length).toBe(2);
+      expect(store.absences.length).toBe(3);
       expect(store.absences[0].type).toBe("sick");
       expect(store.absences[1].duration).toBe("half");
+      expect(store.absences[2].type).toBe("holiday");
     });
 
     test("v1 store migration adds absences array", () => {
@@ -546,6 +582,18 @@ describe("Absence functionality", () => {
 
       // Adding more vacation when half already exists → should be "upgrade"
       expect(resolveAbsenceAdd(existingVacationAbsences)).toBe("upgrade");
+    });
+
+    test("allows adding holiday when another absence type already exists on the same date", async () => {
+      const { resolveAbsenceAdd } = await import("../cli");
+
+      const existingHolidayAbsences: Absence[] = [];
+      const existingVacationAbsences: Absence[] = [
+        { id: "v1", date: "2026-02-09", type: "vacation", duration: "full" },
+      ];
+
+      expect(existingVacationAbsences).toHaveLength(1);
+      expect(resolveAbsenceAdd(existingHolidayAbsences)).toBe("add");
     });
 
     test("blocks when two half-day absences of the same type exist (total >= full)", async () => {

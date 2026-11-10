@@ -395,6 +395,14 @@ describe("parseArgs", () => {
     expect(result?.sick).toBeUndefined();
   });
 
+  test("parses --holiday flag alone", () => {
+    const result = parseArgs(["add", "--holiday"]);
+
+    expect(result?.holiday).toBe(true);
+    expect(result?.sick).toBeUndefined();
+    expect(result?.vacation).toBeUndefined();
+  });
+
   test("parses --half flag combined with --sick", () => {
     const result = parseArgs(["add", "--sick", "--half"]);
 
@@ -406,6 +414,15 @@ describe("parseArgs", () => {
     const result = parseArgs(["add", "--vacation", "--date", "2026-04-01", "--half"]);
 
     expect(result?.vacation).toBe(true);
+    expect(result?.half).toBe(true);
+    expect(result?.date).toBe("2026-04-01");
+    expect(result?.explicitDate).toBe(true);
+  });
+
+  test("parses --holiday with --date and --half", () => {
+    const result = parseArgs(["add", "--holiday", "--date", "2026-04-01", "--half"]);
+
+    expect(result?.holiday).toBe(true);
     expect(result?.half).toBe(true);
     expect(result?.date).toBe("2026-04-01");
     expect(result?.explicitDate).toBe(true);

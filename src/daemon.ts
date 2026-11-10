@@ -113,7 +113,7 @@ async function shutdown(currentSessionId: string | null): Promise<void> {
 /**
  * Main entry point for the daemon.
  */
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
   console.log("Work Tracker Daemon starting...");
   console.log(`Data: ${DATA_DIR}`);
 
@@ -148,5 +148,7 @@ async function main(): Promise<void> {
   }
 }
 
-// Start the daemon
-main().catch(console.error);
+// Only auto-start when run directly, so importing processEvent (tests) doesn't touch ~/.work-tracker
+if (import.meta.main) {
+  main().catch(console.error);
+}

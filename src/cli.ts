@@ -35,6 +35,7 @@ export interface Args {
   id?: string;
   sick?: boolean;
   vacation?: boolean;
+  holiday?: boolean;
   half?: boolean;
 }
 
@@ -96,6 +97,8 @@ export function parseArgs(argv?: string[]): Args | null {
       result.sick = true;
     } else if (arg === "--vacation") {
       result.vacation = true;
+    } else if (arg === "--holiday") {
+      result.holiday = true;
     } else if (arg === "--half") {
       result.half = true;
     }
@@ -182,7 +185,9 @@ export function resolveAbsenceAdd(
  * Formats an absence type for display in the table (5 chars).
  */
 function absenceTypeLabel(type: AbsenceType): string {
-  return type === "sick" ? " sick" : "vactn";
+  if (type === "sick") return " sick";
+  if (type === "vacation") return "vactn";
+  return " holid";
 }
 
 // ============================================================================
@@ -416,8 +421,22 @@ async function stop(): Promise<void> {
 }
 
 /** Adds a past work session or absence manually */
-async function add(date: string, startTime?: string, endTime?: string, sick?: boolean, vacation?: boolean, half?: boolean): Promise<void> {
-  const absenceType: AbsenceType | null = sick ? "sick" : vacation ? "vacation" : null;
+async function add(
+  date: string,
+  startTime?: string,
+  endTime?: string,
+  sick?: boolean,
+  vacation?: boolean,
+  holiday?: boolean,
+  half?: boolean
+): Promise<void> {
+  const absenceType: AbsenceType | null = sick
+    ? "sick"
+    : vacation
+      ? "vacation"
+      : holiday
+        ? "holiday"
+        : null;
 
   if (absenceType) {
     const store = await load();
@@ -454,7 +473,7 @@ async function add(date: string, startTime?: string, endTime?: string, sick?: bo
   }
 
   if (!startTime || !endTime) {
-    fail("--start and --end required (or use --sick / --vacation)");
+    fail("--start and --end required (or use --sick / --vacation / --holiday)");
   }
 
   const store = await load();
@@ -659,6 +678,7 @@ Commands:
   add --date --start --end    Add past session
   add --sick [--half] [--date]     Add sick leave
   add --vacation [--half] [--date] Add vacation
+  add --holiday [--half] [--date]  Add holiday
   list --date         List sessions for date
   edit --id [--start] [--end] Edit session
   delete --id         Delete session or absence
@@ -674,6 +694,7 @@ Options:
   --id ID             Session ID
   --sick              Mark as sick leave
   --vacation          Mark as vacation
+  --holiday           Mark as holiday
   --half              Half day (4h, default: full 8h)
 `;
 
@@ -697,11 +718,11 @@ async function main(): Promise<void> {
     log,
     report,
     export: () => exportCsv(args.output),
-    add: () => add(args.date, args.start, args.end, args.sick, args.vacation, args.half),
+    add: () => add(args.date, args.start, args.end, args.sick, args.vacation, args.holiday, args.half),
     list: () => list(args.date),
     edit: () => edit(args.id, args.explicitDate ? args.date : undefined, args.start, args.end),
     delete: () => del(args.id),
-    daemon: () => import("./daemon").then(() => {}),
+    daemon: () => import("./daemon").then(m => m.main()),
     help: async () => console.log(HELP),
     "-h": async () => console.log(HELP),
     "--help": async () => console.log(HELP),

@@ -19,6 +19,7 @@ That's it. Simple.
 - Runs silently in the background
 - Starts automatically at login
 - Manual session management (add, edit, delete)
+- Sick leave, vacation, and holiday entries
 - CSV export for HR systems
 - View daily summaries and weekly reports
 
@@ -202,6 +203,22 @@ work-tracker add --date 2026-01-20 --start 08:30 --end 17:00
 
 ```
 Added: 2026-01-22 09:00 - 12:30 (3h 30m)
+```
+
+### Add Sick Leave, Vacation, or Holiday
+
+Record non-working days so they count toward daily totals and exports.
+
+```bash
+work-tracker add --sick --date 2026-01-23
+work-tracker add --vacation --date 2026-01-24 --half
+work-tracker add --holiday --date 2026-12-25
+```
+
+**Output:**
+
+```
+Added holiday (full day) on 2026-12-25: 8.0h
 ```
 
 ### List Sessions

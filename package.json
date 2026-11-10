@@ -32,11 +32,11 @@
   "homepage": "https://github.com/cassmtnr/macos-active-time#readme",
   "dependencies": {},
   "devDependencies": {
-    "@eslint/js": "^9.0.0",
-    "@types/bun": "latest",
-    "eslint": "^9.0.0",
-    "eslint-plugin-unused-imports": "^4.0.0",
-    "typescript": "^5.0.0",
-    "typescript-eslint": "^8.0.0"
+    "@eslint/js": "^10.0.1",
+    "@types/bun": "^1.4.4",
+    "eslint": "^10.14.0",
+    "eslint-plugin-unused-imports": "^4.4.1",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.72.2"
   }
 }

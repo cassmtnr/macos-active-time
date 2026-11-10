@@ -1,0 +1,4 @@
+[test]
+# Skip stale compiled copies in dist/
+root = "./src"
+preload = ["./src/tests/setup.ts"]

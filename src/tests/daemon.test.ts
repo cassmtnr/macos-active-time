@@ -306,4 +306,21 @@ describe("processEvent - day change edge cases", () => {
     expect(result.sessions).toHaveLength(1);
     expect(result.sessions[0].endTime).toBe("2026-01-22T00:00:00.000Z");
   });
+
+  test("non-UTC zone: crossing UTC midnight is not a day change", () => {
+    // Regression: dates were UTC, so 00:30→01:30 CET looked like a new day and the session was dropped
+    process.env.TZ = "Europe/Rome";
+    try {
+      let store = processEvent("unlock", emptyStore(), new Date(2026, 0, 22, 0, 30));
+      expect(store.currentSession?.date).toBe("2026-01-22");
+
+      store = processEvent("unlock", store, new Date(2026, 0, 22, 1, 30));
+      store = processEvent("lock", store, new Date(2026, 0, 22, 2, 30));
+      expect(store.sessions).toHaveLength(1);
+      expect(store.sessions[0].date).toBe("2026-01-22");
+      expect(store.sessions[0].startTime).toBe("2026-01-21T23:30:00.000Z");
+    } finally {
+      process.env.TZ = "UTC";
+    }
+  });
 });

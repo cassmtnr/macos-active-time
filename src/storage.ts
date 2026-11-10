@@ -136,12 +136,14 @@ export function generateId(): string {
 // ============================================================================
 
 /**
- * Converts a Date to YYYY-MM-DD format.
+ * Converts a Date to YYYY-MM-DD format in local time.
+ * Local (not UTC) so it agrees with the daemon's local-midnight cutoff and parseTimeToISO.
  *
  * @example toDateStr(new Date()) // "2026-01-22"
  */
 export function toDateStr(date = new Date()): string {
-  return date.toISOString().split("T")[0];
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
 /**
