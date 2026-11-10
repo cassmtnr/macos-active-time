@@ -45,14 +45,14 @@ export interface Store {
   /** The currently active session, or null if not working */
   currentSession: Session | null;
 
-  /** All absence entries (sick leaves and vacations) */
+  /** All absence entries (sick leaves, vacations, and holidays) */
   absences: Absence[];
 }
 
 /**
  * Type of absence entry.
  */
-export type AbsenceType = "sick" | "vacation";
+export type AbsenceType = "sick" | "vacation" | "holiday";
 
 /**
  * Duration of an absence entry.
@@ -62,7 +62,7 @@ export type AbsenceType = "sick" | "vacation";
 export type AbsenceDuration = "full" | "half";
 
 /**
- * A single absence entry (sick leave or vacation).
+ * A single absence entry (sick leave, vacation, or holiday).
  *
  * @example
  * {

@@ -2,6 +2,8 @@
 node_modules/
 bun.lock
 
+.claude/
+
 # Build artifacts (compiled binaries)
 work-tracker
 work-tracker-daemon
